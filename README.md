@@ -1,1 +1,1 @@
-"# livekit-react-core" 
+# livekit-react-core"
