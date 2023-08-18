@@ -261,7 +261,7 @@ var GRID_LAYOUTS = [
     name: "2x1",
     minTiles: 2,
     maxTiles: 2,
-    minWidth: 800,
+    minWidth: 900,
     minHeight: 0
   },
   {
@@ -352,9 +352,7 @@ function supportsScreenSharing() {
 
 // src/types.ts
 var PIN_DEFAULT_STATE = [];
-var WIDGET_DEFAULT_STATE = {
-  showChat: null
-};
+var WIDGET_DEFAULT_STATE = { showChat: null, unreadMessages: 0 };
 function isSourceWitOptions(source) {
   return typeof source === "object";
 }
@@ -661,7 +659,7 @@ function divideIntoPages(list, maxElementsOnPage) {
   return pages;
 }
 function updatePages(currentList, nextList, maxItemsOnPage) {
-  let updatedList = [...currentList];
+  let updatedList = refreshList(currentList, nextList);
   if (currentList.length < nextList.length) {
     const addedItems = differenceBy(nextList, currentList, getTrackReferenceId);
     updatedList = [...updatedList, ...addedItems];
@@ -711,6 +709,18 @@ function updatePages(currentList, nextList, maxItemsOnPage) {
   }
   return updatedList;
 }
+function refreshList(currentList, nextList) {
+  return currentList.map((currentItem) => {
+    const updateForCurrentItem = nextList.find(
+      (newItem_) => getTrackReferenceId(currentItem) === getTrackReferenceId(newItem_)
+    );
+    if (updateForCurrentItem) {
+      return updateForCurrentItem;
+    } else {
+      return currentItem;
+    }
+  });
+}
 
 // src/components/mediaToggle.ts
 import { Track as Track7 } from "livekit-client";
@@ -721,7 +731,7 @@ import { ParticipantEvent as ParticipantEvent2, RoomEvent as RoomEvent3, Track a
 import { map as map3, switchMap, Observable as Observable2, startWith as startWith3 } from "rxjs";
 
 // src/observables/room.ts
-import { Subject, map, Observable, startWith, finalize, filter } from "rxjs";
+import { Subject, map, Observable, startWith, finalize, filter, concat } from "rxjs";
 import { Room, RoomEvent as RoomEvent2, Track as Track4 } from "livekit-client";
 function observeRoomEvents(room, ...events) {
   const observable = new Observable((subscribe) => {
@@ -885,9 +895,8 @@ function createMediaDeviceObserver(kind, requestPermissions = true) {
       );
     }
     (_a = navigator == null ? void 0 : navigator.mediaDevices) == null ? void 0 : _a.addEventListener("devicechange", onDeviceChange);
-    onDeviceChange();
   }
-  return observable;
+  return concat(Room.getLocalDevices(kind, requestPermissions), observable);
 }
 function createDataObserver(room) {
   return roomEventSelector(room, RoomEvent2.DataReceived);
@@ -904,7 +913,7 @@ function createActiveDeviceObservable(room, kind) {
   return roomEventSelector(room, RoomEvent2.ActiveDeviceChanged).pipe(
     filter(([kindOfDevice]) => kindOfDevice === kind),
     map(([kind2, deviceId]) => {
-      console.log("activeDeviceObservable | RoomEvent.ActiveDeviceChanged", { kind: kind2, deviceId });
+      log.debug("activeDeviceObservable | RoomEvent.ActiveDeviceChanged", { kind: kind2, deviceId });
       return deviceId;
     }),
     startWith(room.getActiveDevice(kind))
@@ -981,7 +990,8 @@ function observeParticipantMedia(participant) {
     ParticipantEvent2.TrackSubscribed,
     ParticipantEvent2.TrackUnsubscribed,
     ParticipantEvent2.LocalTrackPublished,
-    ParticipantEvent2.LocalTrackUnpublished
+    ParticipantEvent2.LocalTrackUnpublished,
+    ParticipantEvent2.MediaDevicesError
     // ParticipantEvent.ConnectionQualityChanged,
   ).pipe(
     map3((p) => {
@@ -1217,24 +1227,42 @@ function setupManualToggle() {
 }
 
 // src/components/mediaDeviceSelect.ts
+import {
+  Track as Track8
+} from "livekit-client";
 import { BehaviorSubject } from "rxjs";
-function setupDeviceSelector(kind, room) {
+function setupDeviceSelector(kind, room, localTrack) {
   const activeDeviceSubject = new BehaviorSubject(void 0);
   const activeDeviceObservable = room ? createActiveDeviceObservable(room, kind) : activeDeviceSubject.asObservable();
   const setActiveMediaDevice = (_0, ..._1) => __async(this, [_0, ..._1], function* (id, options = {}) {
-    var _a;
+    var _a, _b, _c;
     if (room) {
       log.debug(`Switching active device of kind "${kind}" with id ${id}.`);
       yield room.switchActiveDevice(kind, id, options.exact);
       const actualDeviceId = (_a = room.getActiveDevice(kind)) != null ? _a : id;
       if (actualDeviceId !== id && id !== "default") {
-        log.warn(
+        log.info(
           `We tried to select the device with id (${id}), but the browser decided to select the device with id (${actualDeviceId}) instead.`
         );
       }
-      activeDeviceSubject.next(id === "default" ? id : actualDeviceId);
-    } else {
-      log.debug("Skip the device switch because the room object is not available. ");
+      let targetTrack = void 0;
+      if (kind === "audioinput")
+        targetTrack = (_b = room.localParticipant.getTrack(Track8.Source.Microphone)) == null ? void 0 : _b.track;
+      else if (kind === "videoinput") {
+        targetTrack = (_c = room.localParticipant.getTrack(Track8.Source.Camera)) == null ? void 0 : _c.track;
+      }
+      const useDefault = id === "default" && !targetTrack || id === "default" && (targetTrack == null ? void 0 : targetTrack.mediaStreamTrack.label.startsWith("Default"));
+      activeDeviceSubject.next(useDefault ? id : actualDeviceId);
+    } else if (localTrack) {
+      yield localTrack.setDeviceId(options.exact ? { exact: id } : id);
+      const actualId = yield localTrack.getDeviceId();
+      activeDeviceSubject.next(
+        id === "default" && localTrack.mediaStreamTrack.label.startsWith("Default") ? id : actualId
+      );
+    } else if (activeDeviceSubject.value !== id) {
+      log.warn(
+        "device switch skipped, please provide either a room or a local track to switch on. "
+      );
       activeDeviceSubject.next(id);
     }
   });
@@ -1263,14 +1291,14 @@ function setupConnectionQualityIndicator(participant) {
 }
 
 // src/components/trackMutedIndicator.ts
-import { Track as Track8 } from "livekit-client";
+import { Track as Track9 } from "livekit-client";
 function setupTrackMutedIndicator(participant, source) {
   let classForSource = "track-muted-indicator-camera";
   switch (source) {
-    case Track8.Source.Camera:
+    case Track9.Source.Camera:
       classForSource = "track-muted-indicator-camera";
       break;
-    case Track8.Source.Microphone:
+    case Track9.Source.Microphone:
       classForSource = "track-muted-indicator-microphone";
       break;
     default:
@@ -1345,14 +1373,18 @@ function setupDataMessageHandler(room, topic, onMessage) {
 // src/components/chat.ts
 var encoder = new TextEncoder();
 var decoder = new TextDecoder();
-function setupChat(room) {
+var encode = (message) => encoder.encode(JSON.stringify({ message: message.message, timestamp: message.timestamp }));
+var decode = (message) => JSON.parse(decoder.decode(message));
+function setupChat(room, options) {
   const onDestroyObservable = new Subject3();
   const messageSubject = new Subject3();
   const { messageObservable } = setupDataMessageHandler(room, DataTopic.CHAT);
   messageObservable.pipe(takeUntil(onDestroyObservable)).subscribe(messageSubject);
+  const { messageDecoder, messageEncoder } = options != null ? options : {};
+  const finalMessageDecoder = messageDecoder != null ? messageDecoder : decode;
   const messagesObservable = messageSubject.pipe(
     map6((msg) => {
-      const parsedMessage = JSON.parse(decoder.decode(msg.payload));
+      const parsedMessage = finalMessageDecoder(msg.payload);
       const newMessage = __spreadProps(__spreadValues({}, parsedMessage), { from: msg.from });
       return newMessage;
     }),
@@ -1360,9 +1392,10 @@ function setupChat(room) {
     takeUntil(onDestroyObservable)
   );
   const isSending$ = new BehaviorSubject2(false);
+  const finalMessageEncoder = messageEncoder != null ? messageEncoder : encode;
   const send = (message) => __async(this, null, function* () {
     const timestamp = Date.now();
-    const encodedMsg = encoder.encode(JSON.stringify({ timestamp, message }));
+    const encodedMsg = finalMessageEncoder({ message, timestamp });
     isSending$.next(true);
     try {
       yield sendMessage(room.localParticipant, encodedMsg, DataTopic.CHAT, {
@@ -1475,7 +1508,6 @@ function getTrackReferences(room, sources, onlySubscribedTracks = true) {
         return {
           participant,
           publication: track,
-          track: track.track,
           source: track.source
         };
       });
@@ -1512,15 +1544,15 @@ function trackReferencesObservable(room, sources, options) {
 }
 
 // src/observables/dom-event.ts
-import { concat, distinctUntilChanged, fromEvent, map as map8, of, skipUntil, timeout } from "rxjs";
+import { concat as concat2, distinctUntilChanged, fromEvent, map as map8, of, skipUntil, timeout } from "rxjs";
 function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   if (htmlElement === null)
     return of(false);
-  const move$ = fromEvent(htmlElement, "mousemove").pipe(map8(() => true));
+  const move$ = fromEvent(htmlElement, "mousemove", { passive: true }).pipe(map8(() => true));
   const moveAndStop$ = move$.pipe(
     timeout({
       each: inactiveAfter,
-      with: () => concat(of(false), moveAndStop$.pipe(skipUntil(move$)))
+      with: () => concat2(of(false), moveAndStop$.pipe(skipUntil(move$)))
     }),
     distinctUntilChanged()
   );
@@ -1566,6 +1598,7 @@ export {
   isTrackReference,
   isTrackReferencePinned,
   isTrackReferencePlaceholder,
+  isWeb,
   log,
   mutedObserver,
   observeParticipantEvents,

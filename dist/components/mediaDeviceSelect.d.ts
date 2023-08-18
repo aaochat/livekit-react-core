@@ -1,4 +1,4 @@
-import type { Room } from 'livekit-client';
+import { type LocalAudioTrack, type LocalVideoTrack, type Room } from 'livekit-client';
 export type SetMediaDeviceOptions = {
     /**
      *  If true, adds an `exact` constraint to the getUserMedia request.
@@ -6,7 +6,7 @@ export type SetMediaDeviceOptions = {
      */
     exact?: boolean;
 };
-export declare function setupDeviceSelector(kind: MediaDeviceKind, room?: Room): {
+export declare function setupDeviceSelector(kind: MediaDeviceKind, room?: Room, localTrack?: LocalAudioTrack | LocalVideoTrack): {
     className: string;
     activeDeviceObservable: import("rxjs").Observable<string | undefined>;
     setActiveMediaDevice: (id: string, options?: SetMediaDeviceOptions) => Promise<void>;

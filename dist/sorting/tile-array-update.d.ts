@@ -4,7 +4,7 @@ type VisualChanges<T> = {
     added: T[];
 };
 export type UpdatableItem = TrackReferenceOrPlaceholder | number;
-/** Check if something visually change on the page. */
+/** Check to see if anything visually changes on the page. */
 export declare function visualPageChange<T extends UpdatableItem>(state: T[], next: T[]): VisualChanges<T>;
 export declare function findIndex<T extends UpdatableItem>(trackReference: T, trackReferences: T[]): number;
 /** Swap items in the complete list of all elements */
