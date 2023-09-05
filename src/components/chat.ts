@@ -16,18 +16,7 @@ export interface ReceivedChatMessage extends ChatMessage {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const encode = (message: ChatMessage) =>
-  encoder.encode(JSON.stringify({ message: message.message, timestamp: message.timestamp }));
-
-const decode = (message: Uint8Array) => JSON.parse(decoder.decode(message)) as ReceivedChatMessage;
-
-export function setupChat(
-  room: Room,
-  options?: {
-    messageEncoder?: (message: ChatMessage) => Uint8Array;
-    messageDecoder?: (message: Uint8Array) => ReceivedChatMessage;
-  },
-) {
+export function setupChat(room: Room) {
   const onDestroyObservable = new Subject<void>();
   const messageSubject = new Subject<{
     payload: Uint8Array;
@@ -39,14 +28,10 @@ export function setupChat(
   const { messageObservable } = setupDataMessageHandler(room, DataTopic.CHAT);
   messageObservable.pipe(takeUntil(onDestroyObservable)).subscribe(messageSubject);
 
-  const { messageDecoder, messageEncoder } = options ?? {};
-
-  const finalMessageDecoder = messageDecoder ?? decode;
-
   /** Build up the message array over time. */
   const messagesObservable = messageSubject.pipe(
     map((msg) => {
-      const parsedMessage = finalMessageDecoder(msg.payload);
+      const parsedMessage = JSON.parse(decoder.decode(msg.payload)) as ChatMessage;
       const newMessage: ReceivedChatMessage = { ...parsedMessage, from: msg.from };
       return newMessage;
     }),
@@ -56,11 +41,9 @@ export function setupChat(
 
   const isSending$ = new BehaviorSubject<boolean>(false);
 
-  const finalMessageEncoder = messageEncoder ?? encode;
-
   const send = async (message: string) => {
     const timestamp = Date.now();
-    const encodedMsg = finalMessageEncoder({ message, timestamp });
+    const encodedMsg = encoder.encode(JSON.stringify({ timestamp, message }));
     isSending$.next(true);
     try {
       await sendMessage(room.localParticipant, encodedMsg, DataTopic.CHAT, {

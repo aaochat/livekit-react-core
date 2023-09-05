@@ -1,7 +1,4 @@
-/**
- * @internal
- */
-export function isWeb(): boolean {
+function isWeb(): boolean {
   return typeof document !== 'undefined';
 }
 

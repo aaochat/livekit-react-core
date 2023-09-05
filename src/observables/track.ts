@@ -71,10 +71,11 @@ function getTrackReferences(
             // either return all or only the ones that are subscribed
             (!onlySubscribedTracks || track.track),
         )
-        .map((track): TrackReference => {
+        .map((track) => {
           return {
             participant: participant,
             publication: track,
+            track: track.track,
             source: track.source,
           };
         });

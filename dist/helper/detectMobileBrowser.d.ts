@@ -1,8 +1,4 @@
 /**
- * @internal
- */
-export declare function isWeb(): boolean;
-/**
  * Mobile browser detection based on `navigator.userAgent` string.
  * Defaults to returning `false` if not in a browser.
  *

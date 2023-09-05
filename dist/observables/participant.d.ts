@@ -26,7 +26,7 @@ export declare function participantInfoObserver(participant: Participant): Obser
     metadata: string | undefined;
 }>;
 export declare function createConnectionQualityObserver(participant: Participant): Observable<import("livekit-client").ConnectionQuality>;
-export declare function participantEventSelector<T extends ParticipantEvent>(participant: Participant, event: T): Observable<Parameters<ParticipantEventCallbacks[Extract<T, keyof ParticipantEventCallbacks>]>>;
+export declare function participantEventSelector<T extends ParticipantEvent>(participant: Participant, event: T): Observable<Parameters<ParticipantEventCallbacks[T]>>;
 export declare function mutedObserver(participant: Participant, source: Track.Source): Observable<boolean>;
 export declare function createIsSpeakingObserver(participant: Participant): Observable<boolean>;
 type ConnectedParticipantsObserverOptions = {
@@ -37,6 +37,6 @@ export type ConnectedParticipantObserverOptions = {
     additionalEvents?: ParticipantEvent[];
 };
 export declare function connectedParticipantObserver(room: Room, identity: string, options?: ConnectedParticipantObserverOptions): Observable<RemoteParticipant | undefined>;
-export declare function participantPermissionObserver(participant: Participant): Observable<import("livekit-client/dist/src/proto/livekit_models_pb").ParticipantPermission | undefined>;
+export declare function participantPermissionObserver(participant: Participant): Observable<import("livekit-client/dist/src/proto/livekit_models").ParticipantPermission | undefined>;
 export {};
 //# sourceMappingURL=participant.d.ts.map

@@ -4,7 +4,6 @@ export type PinState = TrackReferenceOrPlaceholder[];
 export declare const PIN_DEFAULT_STATE: PinState;
 export type WidgetState = {
     showChat: string | null;
-    unreadMessages: number;
 };
 export declare const WIDGET_DEFAULT_STATE: WidgetState;
 export type TrackSourceWithOptions = {
