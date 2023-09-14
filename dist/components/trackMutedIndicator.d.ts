@@ -1,6 +1,5 @@
-import type { Participant } from 'livekit-client';
-import { Track } from 'livekit-client';
-export declare function setupTrackMutedIndicator(participant: Participant, source: Track.Source): {
+import type { TrackReferenceOrPlaceholder } from '../track-reference';
+export declare function setupTrackMutedIndicator(trackRef: TrackReferenceOrPlaceholder): {
     className: string;
     mediaMutedObserver: import("rxjs").Observable<boolean>;
 };

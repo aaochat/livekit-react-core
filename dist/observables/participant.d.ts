@@ -1,8 +1,9 @@
 import type { Participant, RemoteParticipant, Room, TrackPublication } from 'livekit-client';
-import { ParticipantEvent, RoomEvent, Track } from 'livekit-client';
+import { ParticipantEvent, RoomEvent } from 'livekit-client';
 import { Observable } from 'rxjs';
 import type { ParticipantEventCallbacks } from 'livekit-client/dist/src/room/participant/Participant';
 import type { TrackIdentifier } from '../types';
+import { TrackReferenceOrPlaceholder } from '../track-reference';
 export declare function observeParticipantEvents<T extends Participant>(participant: T, ...events: ParticipantEvent[]): Observable<T>;
 export interface ParticipantMedia<T extends Participant = Participant> {
     isCameraEnabled: boolean;
@@ -26,8 +27,8 @@ export declare function participantInfoObserver(participant: Participant): Obser
     metadata: string | undefined;
 }>;
 export declare function createConnectionQualityObserver(participant: Participant): Observable<import("livekit-client").ConnectionQuality>;
-export declare function participantEventSelector<T extends ParticipantEvent>(participant: Participant, event: T): Observable<Parameters<ParticipantEventCallbacks[T]>>;
-export declare function mutedObserver(participant: Participant, source: Track.Source): Observable<boolean>;
+export declare function participantEventSelector<T extends ParticipantEvent>(participant: Participant, event: T): Observable<Parameters<ParticipantEventCallbacks[Extract<T, keyof ParticipantEventCallbacks>]>>;
+export declare function mutedObserver(trackRef: TrackReferenceOrPlaceholder): Observable<boolean>;
 export declare function createIsSpeakingObserver(participant: Participant): Observable<boolean>;
 type ConnectedParticipantsObserverOptions = {
     additionalRoomEvents?: RoomEvent[];
@@ -37,6 +38,6 @@ export type ConnectedParticipantObserverOptions = {
     additionalEvents?: ParticipantEvent[];
 };
 export declare function connectedParticipantObserver(room: Room, identity: string, options?: ConnectedParticipantObserverOptions): Observable<RemoteParticipant | undefined>;
-export declare function participantPermissionObserver(participant: Participant): Observable<import("livekit-client/dist/src/proto/livekit_models").ParticipantPermission | undefined>;
+export declare function participantPermissionObserver(participant: Participant): Observable<import("livekit-client/dist/src/proto/livekit_models_pb").ParticipantPermission | undefined>;
 export {};
 //# sourceMappingURL=participant.d.ts.map

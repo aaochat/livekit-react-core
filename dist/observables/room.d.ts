@@ -22,4 +22,5 @@ export declare function roomAudioPlaybackAllowedObservable(room: Room): Observab
     canPlayAudio: boolean;
 }>;
 export declare function createActiveDeviceObservable(room: Room, kind: MediaDeviceKind): Observable<string | undefined>;
+export declare function encryptionStatusObservable(room: Room, participant: Participant): Observable<boolean>;
 //# sourceMappingURL=room.d.ts.map

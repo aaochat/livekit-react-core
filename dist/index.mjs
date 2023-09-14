@@ -43,6 +43,84 @@ var cssPrefix = "lk";
 
 // src/utils.ts
 import { LocalParticipant, RemoteParticipant } from "livekit-client";
+
+// src/track-reference/track-reference.types.ts
+function isTrackReference(trackReference) {
+  if (typeof trackReference === "undefined") {
+    return false;
+  }
+  return isTrackReferenceSubscribed(trackReference) || isTrackReferencePublished(trackReference);
+}
+function isTrackReferenceSubscribed(trackReference) {
+  var _a;
+  if (!trackReference) {
+    return false;
+  }
+  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("track") && typeof ((_a = trackReference.publication) == null ? void 0 : _a.track) !== "undefined";
+}
+function isTrackReferencePublished(trackReference) {
+  if (!trackReference) {
+    return false;
+  }
+  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("publication") && typeof trackReference.publication !== "undefined";
+}
+function isTrackReferencePlaceholder(trackReference) {
+  if (!trackReference) {
+    return false;
+  }
+  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && typeof trackReference.publication === "undefined";
+}
+
+// src/track-reference/track-reference.utils.ts
+function getTrackReferenceId(trackReference) {
+  if (typeof trackReference === "string" || typeof trackReference === "number") {
+    return `${trackReference}`;
+  } else if (isTrackReferencePlaceholder(trackReference)) {
+    return `${trackReference.participant.identity}_${trackReference.source}_placeholder`;
+  } else if (isTrackReference(trackReference)) {
+    return `${trackReference.participant.identity}_${trackReference.publication.source}_${trackReference.publication.trackSid}`;
+  } else {
+    throw new Error(`Can't generate a id for the given track reference: ${trackReference}`);
+  }
+}
+function getTrackReferenceSource(trackReference) {
+  if (isTrackReference(trackReference)) {
+    return trackReference.publication.source;
+  } else {
+    return trackReference.source;
+  }
+}
+function isEqualTrackRef(a, b) {
+  if (a === void 0 || b === void 0) {
+    return false;
+  }
+  if (isTrackReference(a) && isTrackReference(b)) {
+    return a.publication.trackSid === b.publication.trackSid;
+  } else {
+    return getTrackReferenceId(a) === getTrackReferenceId(b);
+  }
+}
+function isTrackReferencePinned(trackReference, pinState) {
+  if (typeof pinState === "undefined") {
+    return false;
+  }
+  if (isTrackReference(trackReference)) {
+    return pinState.some(
+      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReference(pinnedTrackReference) && pinnedTrackReference.publication.trackSid === trackReference.publication.trackSid
+    );
+  } else if (isTrackReferencePlaceholder(trackReference)) {
+    return pinState.some(
+      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReferencePlaceholder(pinnedTrackReference) && pinnedTrackReference.source === trackReference.source
+    );
+  } else {
+    return false;
+  }
+}
+function isPlaceholderReplacement(currentTrackRef, nextTrackRef) {
+  return isTrackReferencePlaceholder(currentTrackRef) && isTrackReference(nextTrackRef) && nextTrackRef.participant.identity === currentTrackRef.participant.identity && nextTrackRef.source === currentTrackRef.source;
+}
+
+// src/utils.ts
 function isLocal(p) {
   return p instanceof LocalParticipant;
 }
@@ -68,6 +146,12 @@ function isParticipantSourcePinned(participant, source, pinState) {
   return pinState.some(
     ({ source: pinnedSource, participant: pinnedParticipant }) => pinnedSource === source && pinnedParticipant.identity === participant.identity
   );
+}
+function isParticipantTrackReferencePinned(trackRef, pinState) {
+  if (pinState === void 0) {
+    return false;
+  }
+  return pinState.some((pinnedTrackRef) => isEqualTrackRef(pinnedTrackRef, trackRef));
 }
 function getScrollBarWidth() {
   const inner = document.createElement("p");
@@ -261,7 +345,7 @@ var GRID_LAYOUTS = [
     name: "2x1",
     minTiles: 2,
     maxTiles: 2,
-    minWidth: 800,
+    minWidth: 900,
     minHeight: 0
   },
   {
@@ -352,9 +436,7 @@ function supportsScreenSharing() {
 
 // src/types.ts
 var PIN_DEFAULT_STATE = [];
-var WIDGET_DEFAULT_STATE = {
-  showChat: null
-};
+var WIDGET_DEFAULT_STATE = { showChat: null, unreadMessages: 0 };
 function isSourceWitOptions(source) {
   return typeof source === "object";
 }
@@ -364,75 +446,6 @@ function isSourcesWithOptions(sources) {
 
 // src/sorting/sort-track-bundles.ts
 import { Track as Track2 } from "livekit-client";
-
-// src/track-reference/track-reference.types.ts
-function isTrackReference(trackReference) {
-  if (typeof trackReference === "undefined") {
-    return false;
-  }
-  return isTrackReferenceSubscribed(trackReference) || isTrackReferencePublished(trackReference);
-}
-function isTrackReferenceSubscribed(trackReference) {
-  var _a;
-  if (!trackReference) {
-    return false;
-  }
-  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("track") && typeof ((_a = trackReference.publication) == null ? void 0 : _a.track) !== "undefined";
-}
-function isTrackReferencePublished(trackReference) {
-  if (!trackReference) {
-    return false;
-  }
-  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("publication") && typeof trackReference.publication !== "undefined";
-}
-function isTrackReferencePlaceholder(trackReference) {
-  if (!trackReference) {
-    return false;
-  }
-  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && typeof trackReference.publication === "undefined";
-}
-
-// src/track-reference/track-reference.utils.ts
-function getTrackReferenceId(trackReference) {
-  if (typeof trackReference === "string" || typeof trackReference === "number") {
-    return `${trackReference}`;
-  } else if (isTrackReference(trackReference)) {
-    return `${trackReference.participant.identity}_${trackReference.publication.source}`;
-  } else {
-    return `${trackReference.participant.identity}_${trackReference.source}`;
-  }
-}
-function getTrackReferenceSource(trackReference) {
-  if (isTrackReference(trackReference)) {
-    return trackReference.publication.source;
-  } else {
-    return trackReference.source;
-  }
-}
-function isEqualTrackRef(a, b) {
-  if (isTrackReference(a) && isTrackReference(b)) {
-    return a.publication.trackSid === b.publication.trackSid;
-  } else if (isTrackReferencePlaceholder(a) && isTrackReferencePlaceholder(b)) {
-    return a.participant.identity === b.participant.identity && a.source === b.source;
-  }
-  return false;
-}
-function isTrackReferencePinned(trackReference, pinState) {
-  if (typeof pinState === "undefined") {
-    return false;
-  }
-  if (isTrackReference(trackReference)) {
-    return pinState.some(
-      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReference(pinnedTrackReference) && pinnedTrackReference.publication.trackSid === trackReference.publication.trackSid
-    );
-  } else if (isTrackReferencePlaceholder(trackReference)) {
-    return pinState.some(
-      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReferencePlaceholder(pinnedTrackReference) && pinnedTrackReference.source === trackReference.source
-    );
-  } else {
-    return false;
-  }
-}
 
 // src/sorting/base-sort-functions.ts
 import { Track } from "livekit-client";
@@ -661,12 +674,12 @@ function divideIntoPages(list, maxElementsOnPage) {
   return pages;
 }
 function updatePages(currentList, nextList, maxItemsOnPage) {
-  let updatedList = [...currentList];
-  if (currentList.length < nextList.length) {
-    const addedItems = differenceBy(nextList, currentList, getTrackReferenceId);
+  let updatedList = refreshList(currentList, nextList);
+  if (updatedList.length < nextList.length) {
+    const addedItems = differenceBy(nextList, updatedList, getTrackReferenceId);
     updatedList = [...updatedList, ...addedItems];
   }
-  const currentPages = divideIntoPages(currentList, maxItemsOnPage);
+  const currentPages = divideIntoPages(updatedList, maxItemsOnPage);
   const nextPages = divideIntoPages(nextList, maxItemsOnPage);
   zip(currentPages, nextPages).forEach(([currentPage, nextPage], pageIndex) => {
     if (currentPage && nextPage) {
@@ -704,12 +717,24 @@ function updatePages(currentList, nextList, maxItemsOnPage) {
     }
   });
   if (updatedList.length > nextList.length) {
-    const missingItems = differenceBy(currentList, nextList, getTrackReferenceId);
+    const missingItems = differenceBy(updatedList, nextList, getTrackReferenceId);
     updatedList = updatedList.filter(
       (item) => !missingItems.map(getTrackReferenceId).includes(getTrackReferenceId(item))
     );
   }
   return updatedList;
+}
+function refreshList(currentList, nextList) {
+  return currentList.map((currentItem) => {
+    const updateForCurrentItem = nextList.find(
+      (newItem_) => (
+        // If the IDs match or ..
+        getTrackReferenceId(currentItem) === getTrackReferenceId(newItem_) || // ... if the current item is a placeholder and the new item is the track reference can replace it.
+        typeof currentItem !== "number" && isTrackReferencePlaceholder(currentItem) && isTrackReference(newItem_) && isPlaceholderReplacement(currentItem, newItem_)
+      )
+    );
+    return updateForCurrentItem != null ? updateForCurrentItem : currentItem;
+  });
 }
 
 // src/components/mediaToggle.ts
@@ -721,8 +746,8 @@ import { ParticipantEvent as ParticipantEvent2, RoomEvent as RoomEvent3, Track a
 import { map as map3, switchMap, Observable as Observable2, startWith as startWith3 } from "rxjs";
 
 // src/observables/room.ts
-import { Subject, map, Observable, startWith, finalize, filter } from "rxjs";
-import { Room, RoomEvent as RoomEvent2, Track as Track4 } from "livekit-client";
+import { Subject, map, Observable, startWith, finalize, filter, concat } from "rxjs";
+import { LocalParticipant as LocalParticipant3, Room, RoomEvent as RoomEvent2, Track as Track4 } from "livekit-client";
 function observeRoomEvents(room, ...events) {
   const observable = new Observable((subscribe) => {
     const onRoomUpdate = () => {
@@ -885,9 +910,8 @@ function createMediaDeviceObserver(kind, requestPermissions = true) {
       );
     }
     (_a = navigator == null ? void 0 : navigator.mediaDevices) == null ? void 0 : _a.addEventListener("devicechange", onDeviceChange);
-    onDeviceChange();
   }
-  return observable;
+  return concat(Room.getLocalDevices(kind, requestPermissions), observable);
 }
 function createDataObserver(room) {
   return roomEventSelector(room, RoomEvent2.DataReceived);
@@ -904,10 +928,21 @@ function createActiveDeviceObservable(room, kind) {
   return roomEventSelector(room, RoomEvent2.ActiveDeviceChanged).pipe(
     filter(([kindOfDevice]) => kindOfDevice === kind),
     map(([kind2, deviceId]) => {
-      console.log("activeDeviceObservable | RoomEvent.ActiveDeviceChanged", { kind: kind2, deviceId });
+      log.debug("activeDeviceObservable | RoomEvent.ActiveDeviceChanged", { kind: kind2, deviceId });
       return deviceId;
     }),
     startWith(room.getActiveDevice(kind))
+  );
+}
+function encryptionStatusObservable(room, participant) {
+  return roomEventSelector(room, RoomEvent2.ParticipantEncryptionStatusChanged).pipe(
+    filter(
+      ([, p]) => participant.identity === (p == null ? void 0 : p.identity) || !p && participant.identity === room.localParticipant.identity
+    ),
+    map(([encrypted]) => encrypted),
+    startWith(
+      participant instanceof LocalParticipant3 ? participant.isE2EEEnabled : participant.isEncrypted
+    )
   );
 }
 
@@ -978,10 +1013,10 @@ function observeParticipantMedia(participant) {
     // ParticipantEvent.IsSpeakingChanged,
     ParticipantEvent2.TrackPublished,
     ParticipantEvent2.TrackUnpublished,
-    ParticipantEvent2.TrackSubscribed,
-    ParticipantEvent2.TrackUnsubscribed,
     ParticipantEvent2.LocalTrackPublished,
-    ParticipantEvent2.LocalTrackUnpublished
+    ParticipantEvent2.LocalTrackUnpublished,
+    ParticipantEvent2.MediaDevicesError,
+    ParticipantEvent2.TrackSubscriptionStatusChanged
     // ParticipantEvent.ConnectionQualityChanged,
   ).pipe(
     map3((p) => {
@@ -1052,10 +1087,10 @@ function participantEventSelector(participant, event) {
   });
   return observable;
 }
-function mutedObserver(participant, source) {
-  var _a, _b;
+function mutedObserver(trackRef) {
+  var _a, _b, _c, _d;
   return observeParticipantEvents(
-    participant,
+    trackRef.participant,
     ParticipantEvent2.TrackMuted,
     ParticipantEvent2.TrackUnmuted,
     ParticipantEvent2.TrackSubscribed,
@@ -1063,12 +1098,14 @@ function mutedObserver(participant, source) {
     ParticipantEvent2.LocalTrackPublished,
     ParticipantEvent2.LocalTrackUnpublished
   ).pipe(
-    map3((participant2) => {
-      var _a2;
-      const pub = participant2.getTrack(source);
-      return (_a2 = pub == null ? void 0 : pub.isMuted) != null ? _a2 : true;
+    map3((participant) => {
+      var _a2, _b2;
+      const pub = (_a2 = trackRef.publication) != null ? _a2 : participant.getTrack(trackRef.source);
+      return (_b2 = pub == null ? void 0 : pub.isMuted) != null ? _b2 : true;
     }),
-    startWith3((_b = (_a = participant.getTrack(source)) == null ? void 0 : _a.isMuted) != null ? _b : true)
+    startWith3(
+      (_d = (_c = (_a = trackRef.publication) == null ? void 0 : _a.isMuted) != null ? _c : (_b = trackRef.participant.getTrack(trackRef.source)) == null ? void 0 : _b.isMuted) != null ? _d : true
+    )
   );
 }
 function createIsSpeakingObserver(participant) {
@@ -1217,24 +1254,42 @@ function setupManualToggle() {
 }
 
 // src/components/mediaDeviceSelect.ts
+import {
+  Track as Track8
+} from "livekit-client";
 import { BehaviorSubject } from "rxjs";
-function setupDeviceSelector(kind, room) {
+function setupDeviceSelector(kind, room, localTrack) {
   const activeDeviceSubject = new BehaviorSubject(void 0);
   const activeDeviceObservable = room ? createActiveDeviceObservable(room, kind) : activeDeviceSubject.asObservable();
   const setActiveMediaDevice = (_0, ..._1) => __async(this, [_0, ..._1], function* (id, options = {}) {
-    var _a;
+    var _a, _b, _c;
     if (room) {
       log.debug(`Switching active device of kind "${kind}" with id ${id}.`);
       yield room.switchActiveDevice(kind, id, options.exact);
       const actualDeviceId = (_a = room.getActiveDevice(kind)) != null ? _a : id;
       if (actualDeviceId !== id && id !== "default") {
-        log.warn(
+        log.info(
           `We tried to select the device with id (${id}), but the browser decided to select the device with id (${actualDeviceId}) instead.`
         );
       }
-      activeDeviceSubject.next(id === "default" ? id : actualDeviceId);
-    } else {
-      log.debug("Skip the device switch because the room object is not available. ");
+      let targetTrack = void 0;
+      if (kind === "audioinput")
+        targetTrack = (_b = room.localParticipant.getTrack(Track8.Source.Microphone)) == null ? void 0 : _b.track;
+      else if (kind === "videoinput") {
+        targetTrack = (_c = room.localParticipant.getTrack(Track8.Source.Camera)) == null ? void 0 : _c.track;
+      }
+      const useDefault = id === "default" && !targetTrack || id === "default" && (targetTrack == null ? void 0 : targetTrack.mediaStreamTrack.label.startsWith("Default"));
+      activeDeviceSubject.next(useDefault ? id : actualDeviceId);
+    } else if (localTrack) {
+      yield localTrack.setDeviceId(options.exact ? { exact: id } : id);
+      const actualId = yield localTrack.getDeviceId();
+      activeDeviceSubject.next(
+        id === "default" && localTrack.mediaStreamTrack.label.startsWith("Default") ? id : actualId
+      );
+    } else if (activeDeviceSubject.value !== id) {
+      log.warn(
+        "device switch skipped, please provide either a room or a local track to switch on. "
+      );
       activeDeviceSubject.next(id);
     }
   });
@@ -1263,21 +1318,21 @@ function setupConnectionQualityIndicator(participant) {
 }
 
 // src/components/trackMutedIndicator.ts
-import { Track as Track8 } from "livekit-client";
-function setupTrackMutedIndicator(participant, source) {
+import { Track as Track9 } from "livekit-client";
+function setupTrackMutedIndicator(trackRef) {
   let classForSource = "track-muted-indicator-camera";
-  switch (source) {
-    case Track8.Source.Camera:
+  switch (trackRef.source) {
+    case Track9.Source.Camera:
       classForSource = "track-muted-indicator-camera";
       break;
-    case Track8.Source.Microphone:
+    case Track9.Source.Microphone:
       classForSource = "track-muted-indicator-microphone";
       break;
     default:
       break;
   }
   const className = prefixClass(classForSource);
-  const mediaMutedObserver = mutedObserver(participant, source);
+  const mediaMutedObserver = mutedObserver(trackRef);
   return { className, mediaMutedObserver };
 }
 
@@ -1345,14 +1400,18 @@ function setupDataMessageHandler(room, topic, onMessage) {
 // src/components/chat.ts
 var encoder = new TextEncoder();
 var decoder = new TextDecoder();
-function setupChat(room) {
+var encode = (message) => encoder.encode(JSON.stringify({ message: message.message, timestamp: message.timestamp }));
+var decode = (message) => JSON.parse(decoder.decode(message));
+function setupChat(room, options) {
   const onDestroyObservable = new Subject3();
   const messageSubject = new Subject3();
   const { messageObservable } = setupDataMessageHandler(room, DataTopic.CHAT);
   messageObservable.pipe(takeUntil(onDestroyObservable)).subscribe(messageSubject);
+  const { messageDecoder, messageEncoder } = options != null ? options : {};
+  const finalMessageDecoder = messageDecoder != null ? messageDecoder : decode;
   const messagesObservable = messageSubject.pipe(
     map6((msg) => {
-      const parsedMessage = JSON.parse(decoder.decode(msg.payload));
+      const parsedMessage = finalMessageDecoder(msg.payload);
       const newMessage = __spreadProps(__spreadValues({}, parsedMessage), { from: msg.from });
       return newMessage;
     }),
@@ -1360,9 +1419,10 @@ function setupChat(room) {
     takeUntil(onDestroyObservable)
   );
   const isSending$ = new BehaviorSubject2(false);
+  const finalMessageEncoder = messageEncoder != null ? messageEncoder : encode;
   const send = (message) => __async(this, null, function* () {
     const timestamp = Date.now();
-    const encodedMsg = encoder.encode(JSON.stringify({ timestamp, message }));
+    const encodedMsg = finalMessageEncoder({ message, timestamp });
     isSending$.next(true);
     try {
       yield sendMessage(room.localParticipant, encodedMsg, DataTopic.CHAT, {
@@ -1475,7 +1535,6 @@ function getTrackReferences(room, sources, onlySubscribedTracks = true) {
         return {
           participant,
           publication: track,
-          track: track.track,
           source: track.source
         };
       });
@@ -1512,15 +1571,15 @@ function trackReferencesObservable(room, sources, options) {
 }
 
 // src/observables/dom-event.ts
-import { concat, distinctUntilChanged, fromEvent, map as map8, of, skipUntil, timeout } from "rxjs";
+import { concat as concat2, distinctUntilChanged, fromEvent, map as map8, of, skipUntil, timeout } from "rxjs";
 function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   if (htmlElement === null)
     return of(false);
-  const move$ = fromEvent(htmlElement, "mousemove").pipe(map8(() => true));
+  const move$ = fromEvent(htmlElement, "mousemove", { passive: true }).pipe(map8(() => true));
   const moveAndStop$ = move$.pipe(
     timeout({
       each: inactiveAfter,
-      with: () => concat(of(false), moveAndStop$.pipe(skipUntil(move$)))
+      with: () => concat2(of(false), moveAndStop$.pipe(skipUntil(move$)))
     }),
     distinctUntilChanged()
   );
@@ -1552,6 +1611,7 @@ export {
   createTrackObserver,
   createUrlRegExp,
   cssPrefix,
+  encryptionStatusObservable,
   getScrollBarWidth,
   getTrackByIdentifier,
   getTrackReferenceId,
@@ -1560,12 +1620,15 @@ export {
   isLocal,
   isMobileBrowser,
   isParticipantSourcePinned,
+  isParticipantTrackReferencePinned,
+  isPlaceholderReplacement,
   isRemote,
   isSourceWitOptions,
   isSourcesWithOptions,
   isTrackReference,
   isTrackReferencePinned,
   isTrackReferencePlaceholder,
+  isWeb,
   log,
   mutedObserver,
   observeParticipantEvents,
