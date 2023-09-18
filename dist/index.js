@@ -1667,6 +1667,7 @@ function trackReferencesObservable(room, sources, options) {
   const roomEvents = Array.from(
     (/* @__PURE__ */ new Set([
       import_livekit_client16.RoomEvent.ParticipantConnected,
+      import_livekit_client16.RoomEvent.ParticipantDisconnected,
       import_livekit_client16.RoomEvent.ConnectionStateChanged,
       import_livekit_client16.RoomEvent.LocalTrackPublished,
       import_livekit_client16.RoomEvent.LocalTrackUnpublished,

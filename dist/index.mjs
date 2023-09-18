@@ -1550,6 +1550,7 @@ function trackReferencesObservable(room, sources, options) {
   const roomEvents = Array.from(
     (/* @__PURE__ */ new Set([
       RoomEvent4.ParticipantConnected,
+      RoomEvent4.ParticipantDisconnected,
       RoomEvent4.ConnectionStateChanged,
       RoomEvent4.LocalTrackPublished,
       RoomEvent4.LocalTrackUnpublished,
