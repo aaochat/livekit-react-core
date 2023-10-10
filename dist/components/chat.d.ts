@@ -7,6 +7,10 @@ export interface ChatMessage {
 export interface ReceivedChatMessage extends ChatMessage {
     from?: Participant;
 }
+/** @public */
+export type MessageEncoder = (message: ChatMessage) => Uint8Array;
+/** @public */
+export type MessageDecoder = (message: Uint8Array) => ReceivedChatMessage;
 export declare function setupChat(room: Room, options?: {
     messageEncoder?: (message: ChatMessage) => Uint8Array;
     messageDecoder?: (message: Uint8Array) => ReceivedChatMessage;

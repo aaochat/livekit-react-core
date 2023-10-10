@@ -92,6 +92,7 @@ __export(src_exports, {
   createTrackObserver: () => createTrackObserver,
   createUrlRegExp: () => createUrlRegExp,
   cssPrefix: () => cssPrefix,
+  encryptionStatusObservable: () => encryptionStatusObservable,
   getScrollBarWidth: () => getScrollBarWidth,
   getTrackByIdentifier: () => getTrackByIdentifier,
   getTrackReferenceId: () => getTrackReferenceId,
@@ -100,6 +101,8 @@ __export(src_exports, {
   isLocal: () => isLocal,
   isMobileBrowser: () => isMobileBrowser,
   isParticipantSourcePinned: () => isParticipantSourcePinned,
+  isParticipantTrackReferencePinned: () => isParticipantTrackReferencePinned,
+  isPlaceholderReplacement: () => isPlaceholderReplacement,
   isRemote: () => isRemote,
   isSourceWitOptions: () => isSourceWitOptions,
   isSourcesWithOptions: () => isSourcesWithOptions,
@@ -159,6 +162,84 @@ var cssPrefix = "lk";
 
 // src/utils.ts
 var import_livekit_client = require("livekit-client");
+
+// src/track-reference/track-reference.types.ts
+function isTrackReference(trackReference) {
+  if (typeof trackReference === "undefined") {
+    return false;
+  }
+  return isTrackReferenceSubscribed(trackReference) || isTrackReferencePublished(trackReference);
+}
+function isTrackReferenceSubscribed(trackReference) {
+  var _a;
+  if (!trackReference) {
+    return false;
+  }
+  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("track") && typeof ((_a = trackReference.publication) == null ? void 0 : _a.track) !== "undefined";
+}
+function isTrackReferencePublished(trackReference) {
+  if (!trackReference) {
+    return false;
+  }
+  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("publication") && typeof trackReference.publication !== "undefined";
+}
+function isTrackReferencePlaceholder(trackReference) {
+  if (!trackReference) {
+    return false;
+  }
+  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && typeof trackReference.publication === "undefined";
+}
+
+// src/track-reference/track-reference.utils.ts
+function getTrackReferenceId(trackReference) {
+  if (typeof trackReference === "string" || typeof trackReference === "number") {
+    return `${trackReference}`;
+  } else if (isTrackReferencePlaceholder(trackReference)) {
+    return `${trackReference.participant.identity}_${trackReference.source}_placeholder`;
+  } else if (isTrackReference(trackReference)) {
+    return `${trackReference.participant.identity}_${trackReference.publication.source}_${trackReference.publication.trackSid}`;
+  } else {
+    throw new Error(`Can't generate a id for the given track reference: ${trackReference}`);
+  }
+}
+function getTrackReferenceSource(trackReference) {
+  if (isTrackReference(trackReference)) {
+    return trackReference.publication.source;
+  } else {
+    return trackReference.source;
+  }
+}
+function isEqualTrackRef(a, b) {
+  if (a === void 0 || b === void 0) {
+    return false;
+  }
+  if (isTrackReference(a) && isTrackReference(b)) {
+    return a.publication.trackSid === b.publication.trackSid;
+  } else {
+    return getTrackReferenceId(a) === getTrackReferenceId(b);
+  }
+}
+function isTrackReferencePinned(trackReference, pinState) {
+  if (typeof pinState === "undefined") {
+    return false;
+  }
+  if (isTrackReference(trackReference)) {
+    return pinState.some(
+      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReference(pinnedTrackReference) && pinnedTrackReference.publication.trackSid === trackReference.publication.trackSid
+    );
+  } else if (isTrackReferencePlaceholder(trackReference)) {
+    return pinState.some(
+      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReferencePlaceholder(pinnedTrackReference) && pinnedTrackReference.source === trackReference.source
+    );
+  } else {
+    return false;
+  }
+}
+function isPlaceholderReplacement(currentTrackRef, nextTrackRef) {
+  return isTrackReferencePlaceholder(currentTrackRef) && isTrackReference(nextTrackRef) && nextTrackRef.participant.identity === currentTrackRef.participant.identity && nextTrackRef.source === currentTrackRef.source;
+}
+
+// src/utils.ts
 function isLocal(p) {
   return p instanceof import_livekit_client.LocalParticipant;
 }
@@ -184,6 +265,12 @@ function isParticipantSourcePinned(participant, source, pinState) {
   return pinState.some(
     ({ source: pinnedSource, participant: pinnedParticipant }) => pinnedSource === source && pinnedParticipant.identity === participant.identity
   );
+}
+function isParticipantTrackReferencePinned(trackRef, pinState) {
+  if (pinState === void 0) {
+    return false;
+  }
+  return pinState.some((pinnedTrackRef) => isEqualTrackRef(pinnedTrackRef, trackRef));
 }
 function getScrollBarWidth() {
   const inner = document.createElement("p");
@@ -479,75 +566,6 @@ function isSourcesWithOptions(sources) {
 // src/sorting/sort-track-bundles.ts
 var import_livekit_client5 = require("livekit-client");
 
-// src/track-reference/track-reference.types.ts
-function isTrackReference(trackReference) {
-  if (typeof trackReference === "undefined") {
-    return false;
-  }
-  return isTrackReferenceSubscribed(trackReference) || isTrackReferencePublished(trackReference);
-}
-function isTrackReferenceSubscribed(trackReference) {
-  var _a;
-  if (!trackReference) {
-    return false;
-  }
-  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("track") && typeof ((_a = trackReference.publication) == null ? void 0 : _a.track) !== "undefined";
-}
-function isTrackReferencePublished(trackReference) {
-  if (!trackReference) {
-    return false;
-  }
-  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && trackReference.hasOwnProperty("publication") && typeof trackReference.publication !== "undefined";
-}
-function isTrackReferencePlaceholder(trackReference) {
-  if (!trackReference) {
-    return false;
-  }
-  return trackReference.hasOwnProperty("participant") && trackReference.hasOwnProperty("source") && typeof trackReference.publication === "undefined";
-}
-
-// src/track-reference/track-reference.utils.ts
-function getTrackReferenceId(trackReference) {
-  if (typeof trackReference === "string" || typeof trackReference === "number") {
-    return `${trackReference}`;
-  } else if (isTrackReference(trackReference)) {
-    return `${trackReference.participant.identity}_${trackReference.publication.source}`;
-  } else {
-    return `${trackReference.participant.identity}_${trackReference.source}`;
-  }
-}
-function getTrackReferenceSource(trackReference) {
-  if (isTrackReference(trackReference)) {
-    return trackReference.publication.source;
-  } else {
-    return trackReference.source;
-  }
-}
-function isEqualTrackRef(a, b) {
-  if (isTrackReference(a) && isTrackReference(b)) {
-    return a.publication.trackSid === b.publication.trackSid;
-  } else if (isTrackReferencePlaceholder(a) && isTrackReferencePlaceholder(b)) {
-    return a.participant.identity === b.participant.identity && a.source === b.source;
-  }
-  return false;
-}
-function isTrackReferencePinned(trackReference, pinState) {
-  if (typeof pinState === "undefined") {
-    return false;
-  }
-  if (isTrackReference(trackReference)) {
-    return pinState.some(
-      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReference(pinnedTrackReference) && pinnedTrackReference.publication.trackSid === trackReference.publication.trackSid
-    );
-  } else if (isTrackReferencePlaceholder(trackReference)) {
-    return pinState.some(
-      (pinnedTrackReference) => pinnedTrackReference.participant.identity === trackReference.participant.identity && isTrackReferencePlaceholder(pinnedTrackReference) && pinnedTrackReference.source === trackReference.source
-    );
-  } else {
-    return false;
-  }
-}
-
 // src/sorting/base-sort-functions.ts
 var import_livekit_client4 = require("livekit-client");
 function sortParticipantsByAudioLevel(a, b) {
@@ -776,11 +794,11 @@ function divideIntoPages(list, maxElementsOnPage) {
 }
 function updatePages(currentList, nextList, maxItemsOnPage) {
   let updatedList = refreshList(currentList, nextList);
-  if (currentList.length < nextList.length) {
-    const addedItems = differenceBy(nextList, currentList, getTrackReferenceId);
+  if (updatedList.length < nextList.length) {
+    const addedItems = differenceBy(nextList, updatedList, getTrackReferenceId);
     updatedList = [...updatedList, ...addedItems];
   }
-  const currentPages = divideIntoPages(currentList, maxItemsOnPage);
+  const currentPages = divideIntoPages(updatedList, maxItemsOnPage);
   const nextPages = divideIntoPages(nextList, maxItemsOnPage);
   zip(currentPages, nextPages).forEach(([currentPage, nextPage], pageIndex) => {
     if (currentPage && nextPage) {
@@ -818,7 +836,7 @@ function updatePages(currentList, nextList, maxItemsOnPage) {
     }
   });
   if (updatedList.length > nextList.length) {
-    const missingItems = differenceBy(currentList, nextList, getTrackReferenceId);
+    const missingItems = differenceBy(updatedList, nextList, getTrackReferenceId);
     updatedList = updatedList.filter(
       (item) => !missingItems.map(getTrackReferenceId).includes(getTrackReferenceId(item))
     );
@@ -828,13 +846,13 @@ function updatePages(currentList, nextList, maxItemsOnPage) {
 function refreshList(currentList, nextList) {
   return currentList.map((currentItem) => {
     const updateForCurrentItem = nextList.find(
-      (newItem_) => getTrackReferenceId(currentItem) === getTrackReferenceId(newItem_)
+      (newItem_) => (
+        // If the IDs match or ..
+        getTrackReferenceId(currentItem) === getTrackReferenceId(newItem_) || // ... if the current item is a placeholder and the new item is the track reference can replace it.
+        typeof currentItem !== "number" && isTrackReferencePlaceholder(currentItem) && isTrackReference(newItem_) && isPlaceholderReplacement(currentItem, newItem_)
+      )
     );
-    if (updateForCurrentItem) {
-      return updateForCurrentItem;
-    } else {
-      return currentItem;
-    }
+    return updateForCurrentItem != null ? updateForCurrentItem : currentItem;
   });
 }
 
@@ -1035,6 +1053,17 @@ function createActiveDeviceObservable(room, kind) {
     (0, import_rxjs.startWith)(room.getActiveDevice(kind))
   );
 }
+function encryptionStatusObservable(room, participant) {
+  return roomEventSelector(room, import_livekit_client8.RoomEvent.ParticipantEncryptionStatusChanged).pipe(
+    (0, import_rxjs.filter)(
+      ([, p]) => participant.identity === (p == null ? void 0 : p.identity) || !p && participant.identity === room.localParticipant.identity
+    ),
+    (0, import_rxjs.map)(([encrypted]) => encrypted),
+    (0, import_rxjs.startWith)(
+      participant instanceof import_livekit_client8.LocalParticipant ? participant.isE2EEEnabled : participant.isEncrypted
+    )
+  );
+}
 
 // src/components/mediaTrack.ts
 var import_livekit_client9 = require("livekit-client");
@@ -1103,11 +1132,10 @@ function observeParticipantMedia(participant) {
     // ParticipantEvent.IsSpeakingChanged,
     import_livekit_client10.ParticipantEvent.TrackPublished,
     import_livekit_client10.ParticipantEvent.TrackUnpublished,
-    import_livekit_client10.ParticipantEvent.TrackSubscribed,
-    import_livekit_client10.ParticipantEvent.TrackUnsubscribed,
     import_livekit_client10.ParticipantEvent.LocalTrackPublished,
     import_livekit_client10.ParticipantEvent.LocalTrackUnpublished,
-    import_livekit_client10.ParticipantEvent.MediaDevicesError
+    import_livekit_client10.ParticipantEvent.MediaDevicesError,
+    import_livekit_client10.ParticipantEvent.TrackSubscriptionStatusChanged
     // ParticipantEvent.ConnectionQualityChanged,
   ).pipe(
     (0, import_rxjs3.map)((p) => {
@@ -1178,10 +1206,10 @@ function participantEventSelector(participant, event) {
   });
   return observable;
 }
-function mutedObserver(participant, source) {
-  var _a, _b;
+function mutedObserver(trackRef) {
+  var _a, _b, _c, _d;
   return observeParticipantEvents(
-    participant,
+    trackRef.participant,
     import_livekit_client10.ParticipantEvent.TrackMuted,
     import_livekit_client10.ParticipantEvent.TrackUnmuted,
     import_livekit_client10.ParticipantEvent.TrackSubscribed,
@@ -1189,12 +1217,14 @@ function mutedObserver(participant, source) {
     import_livekit_client10.ParticipantEvent.LocalTrackPublished,
     import_livekit_client10.ParticipantEvent.LocalTrackUnpublished
   ).pipe(
-    (0, import_rxjs3.map)((participant2) => {
-      var _a2;
-      const pub = participant2.getTrack(source);
-      return (_a2 = pub == null ? void 0 : pub.isMuted) != null ? _a2 : true;
+    (0, import_rxjs3.map)((participant) => {
+      var _a2, _b2;
+      const pub = (_a2 = trackRef.publication) != null ? _a2 : participant.getTrack(trackRef.source);
+      return (_b2 = pub == null ? void 0 : pub.isMuted) != null ? _b2 : true;
     }),
-    (0, import_rxjs3.startWith)((_b = (_a = participant.getTrack(source)) == null ? void 0 : _a.isMuted) != null ? _b : true)
+    (0, import_rxjs3.startWith)(
+      (_d = (_c = (_a = trackRef.publication) == null ? void 0 : _a.isMuted) != null ? _c : (_b = trackRef.participant.getTrack(trackRef.source)) == null ? void 0 : _b.isMuted) != null ? _d : true
+    )
   );
 }
 function createIsSpeakingObserver(participant) {
@@ -1406,9 +1436,9 @@ function setupConnectionQualityIndicator(participant) {
 
 // src/components/trackMutedIndicator.ts
 var import_livekit_client13 = require("livekit-client");
-function setupTrackMutedIndicator(participant, source) {
+function setupTrackMutedIndicator(trackRef) {
   let classForSource = "track-muted-indicator-camera";
-  switch (source) {
+  switch (trackRef.source) {
     case import_livekit_client13.Track.Source.Camera:
       classForSource = "track-muted-indicator-camera";
       break;
@@ -1419,7 +1449,7 @@ function setupTrackMutedIndicator(participant, source) {
       break;
   }
   const className = prefixClass(classForSource);
-  const mediaMutedObserver = mutedObserver(participant, source);
+  const mediaMutedObserver = mutedObserver(trackRef);
   return { className, mediaMutedObserver };
 }
 
@@ -1637,6 +1667,7 @@ function trackReferencesObservable(room, sources, options) {
   const roomEvents = Array.from(
     (/* @__PURE__ */ new Set([
       import_livekit_client16.RoomEvent.ParticipantConnected,
+      import_livekit_client16.RoomEvent.ParticipantDisconnected,
       import_livekit_client16.RoomEvent.ConnectionStateChanged,
       import_livekit_client16.RoomEvent.LocalTrackPublished,
       import_livekit_client16.RoomEvent.LocalTrackUnpublished,
@@ -1699,6 +1730,7 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   createTrackObserver,
   createUrlRegExp,
   cssPrefix,
+  encryptionStatusObservable,
   getScrollBarWidth,
   getTrackByIdentifier,
   getTrackReferenceId,
@@ -1707,6 +1739,8 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   isLocal,
   isMobileBrowser,
   isParticipantSourcePinned,
+  isParticipantTrackReferencePinned,
+  isPlaceholderReplacement,
   isRemote,
   isSourceWitOptions,
   isSourcesWithOptions,
