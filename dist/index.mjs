@@ -139,14 +139,6 @@ var attachIfSubscribed = (publication, element) => {
     }
   }
 };
-function isParticipantSourcePinned(participant, source, pinState) {
-  if (pinState === void 0) {
-    return false;
-  }
-  return pinState.some(
-    ({ source: pinnedSource, participant: pinnedParticipant }) => pinnedSource === source && pinnedParticipant.identity === participant.identity
-  );
-}
 function isParticipantTrackReferencePinned(trackRef, pinState) {
   if (pinState === void 0) {
     return false;
@@ -186,13 +178,10 @@ function isMobileBrowser() {
   return isWeb() ? /Mobi/i.test(window.navigator.userAgent) : false;
 }
 
-// src/helper/urlRegex.ts
-import { TLDs } from "global-tld-list";
-var createUrlRegExp = (options) => {
-  options = __spreadValues({
-    strict: true
-  }, options);
-  const protocol = `(?:(?:[a-z]+:)?//)${options.strict ? "" : "?"}`;
+// src/helper/url-regex.ts
+function createUrlRegExp(options) {
+  options = __spreadValues({}, options);
+  const protocol = `(?:(?:[a-z]+:)?//)?`;
   const auth = "(?:\\S+(?::\\S*)?@)?";
   const ip = new RegExp(
     "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}",
@@ -200,12 +189,12 @@ var createUrlRegExp = (options) => {
   ).source;
   const host = "(?:(?:[a-z\\u00a1-\\uffff0-9][-_]*)*[a-z\\u00a1-\\uffff0-9]+)";
   const domain = "(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*";
-  const tld = `(?:\\.${options.strict ? "(?:[a-z\\u00a1-\\uffff]{2,})" : `(?:${TLDs.sort((a, b) => b.length - a.length).join("|")})`})\\.?`;
+  const tld = `(?:\\.(?:[a-z\\u00a1-\\uffff]{2,}))\\.?`;
   const port = "(?::\\d{2,5})?";
   const path = '(?:[/?#][^\\s"]*)?';
   const regex = `(?:${protocol}|www\\.)${auth}(?:localhost|${ip}|${host}${domain}${tld})${port}${path}`;
   return options.exact ? new RegExp(`(?:^${regex}$)`, "i") : new RegExp(regex, "ig");
-};
+}
 
 // src/helper/emailRegex.ts
 import createEmailRegExp from "email-regex";
@@ -230,7 +219,7 @@ function wasClickOutside(insideElement, event) {
 var createDefaultGrammar = () => {
   return {
     email: createEmailRegExp(),
-    url: createUrlRegExp({ strict: false })
+    url: createUrlRegExp({})
   };
 };
 function tokenize(input, grammar) {
@@ -288,6 +277,19 @@ var allParticipantRoomEvents = [
   RoomEvent.LocalTrackPublished,
   RoomEvent.LocalTrackUnpublished
 ];
+var participantTrackEvents = [
+  ParticipantEvent.TrackPublished,
+  ParticipantEvent.TrackUnpublished,
+  ParticipantEvent.TrackMuted,
+  ParticipantEvent.TrackUnmuted,
+  ParticipantEvent.TrackStreamStateChanged,
+  ParticipantEvent.TrackSubscribed,
+  ParticipantEvent.TrackUnsubscribed,
+  ParticipantEvent.TrackSubscriptionPermissionChanged,
+  ParticipantEvent.TrackSubscriptionFailed,
+  ParticipantEvent.LocalTrackPublished,
+  ParticipantEvent.LocalTrackUnpublished
+];
 var allRemoteParticipantEvents = [
   ParticipantEvent.ConnectionQualityChanged,
   ParticipantEvent.IsSpeakingChanged,
@@ -309,7 +311,11 @@ var allParticipantEvents = [
 ];
 
 // src/logger.ts
-import { setLogLevel as setClientSdkLogLevel } from "livekit-client";
+import {
+  setLogLevel as setClientSdkLogLevel,
+  setLogExtension as setClientSdkLogExtension,
+  LogLevel as LogLevelEnum
+} from "livekit-client";
 import loglevel from "loglevel";
 var log = loglevel.getLogger("lk-components-js");
 log.setDefaultLevel("WARN");
@@ -317,6 +323,26 @@ function setLogLevel(level, options = {}) {
   var _a;
   log.setLevel(level);
   setClientSdkLogLevel((_a = options.liveKitClientLogLevel) != null ? _a : level);
+}
+function setLogExtension(extension, options = {}) {
+  var _a;
+  const originalFactory = log.methodFactory;
+  log.methodFactory = (methodName, configLevel, loggerName) => {
+    const rawMethod = originalFactory(methodName, configLevel, loggerName);
+    const logLevel = LogLevelEnum[methodName];
+    const needLog = logLevel >= configLevel && logLevel < LogLevelEnum.silent;
+    return (msg, context) => {
+      if (context)
+        rawMethod(msg, context);
+      else
+        rawMethod(msg);
+      if (needLog) {
+        extension(logLevel, msg, context);
+      }
+    };
+  };
+  log.setLevel(log.getLevel());
+  setClientSdkLogExtension((_a = options.liveKitClientLogExtension) != null ? _a : extension);
 }
 
 // src/helper/grid-layouts.ts
@@ -436,7 +462,11 @@ function supportsScreenSharing() {
 
 // src/types.ts
 var PIN_DEFAULT_STATE = [];
-var WIDGET_DEFAULT_STATE = { showChat: null, unreadMessages: 0 };
+var WIDGET_DEFAULT_STATE = {
+  showChat: null,
+  unreadMessages: 0,
+  showSettings: false
+};
 function isSourceWitOptions(source) {
   return typeof source === "object";
 }
@@ -579,8 +609,8 @@ function sortParticipants(participants) {
     if (a.lastSpokeAt !== b.lastSpokeAt) {
       return sortParticipantsByLastSpokenAT(a, b);
     }
-    const aVideo = a.videoTracks.size > 0;
-    const bVideo = b.videoTracks.size > 0;
+    const aVideo = a.videoTrackPublications.size > 0;
+    const bVideo = b.videoTrackPublications.size > 0;
     if (aVideo !== bVideo) {
       if (aVideo) {
         return -1;
@@ -607,9 +637,12 @@ function sortParticipants(participants) {
 
 // src/helper/array-helper.ts
 function chunk(input, size) {
-  return input.reduce((arr, item, idx) => {
-    return idx % size === 0 ? [...arr, [item]] : [...arr.slice(0, -1), [...arr.slice(-1)[0], item]];
-  }, []);
+  return input.reduce(
+    (arr, item, idx) => {
+      return idx % size === 0 ? [...arr, [item]] : [...arr.slice(0, -1), [...arr.slice(-1)[0], item]];
+    },
+    []
+  );
 }
 function zip(a1, a2) {
   const resultLength = Math.max(a1.length, a2.length);
@@ -743,11 +776,51 @@ import { Subject as Subject2, map as map4, startWith as startWith4 } from "rxjs"
 
 // src/observables/participant.ts
 import { ParticipantEvent as ParticipantEvent2, RoomEvent as RoomEvent3, Track as Track6 } from "livekit-client";
-import { map as map3, switchMap, Observable as Observable2, startWith as startWith3 } from "rxjs";
+import { Observable as Observable2, map as map3, startWith as startWith3, switchMap } from "rxjs";
+
+// src/components/mediaTrack.ts
+import { Track as Track4 } from "livekit-client";
+import { map, startWith } from "rxjs";
+
+// src/styles-interface/class-prefixer.ts
+function prefixClass(unprefixedClassName) {
+  return `${cssPrefix}-${unprefixedClassName}`;
+}
+
+// src/components/mediaTrack.ts
+function setupMediaTrack(trackIdentifier) {
+  const initialPub = getTrackByIdentifier(trackIdentifier);
+  const trackObserver = observeParticipantMedia(trackIdentifier.participant).pipe(
+    map(() => {
+      return getTrackByIdentifier(trackIdentifier);
+    }),
+    startWith(initialPub)
+  );
+  const className = prefixClass(
+    trackIdentifier.source === Track4.Source.Camera || trackIdentifier.source === Track4.Source.ScreenShare ? "participant-media-video" : "participant-media-audio"
+  );
+  return { className, trackObserver };
+}
+function getTrackByIdentifier(options) {
+  if (isTrackReference(options)) {
+    return options.publication;
+  } else {
+    const { source, name, participant } = options;
+    if (source && name) {
+      return participant.getTrackPublications().find((pub) => pub.source === source && pub.trackName === name);
+    } else if (name) {
+      return participant.getTrackPublicationByName(name);
+    } else if (source) {
+      return participant.getTrackPublication(source);
+    } else {
+      throw new Error("At least one of source and name needs to be defined");
+    }
+  }
+}
 
 // src/observables/room.ts
-import { Subject, map, Observable, startWith, finalize, filter, concat } from "rxjs";
-import { LocalParticipant as LocalParticipant3, Room, RoomEvent as RoomEvent2, Track as Track4 } from "livekit-client";
+import { Subject, map as map2, Observable, startWith as startWith2, finalize, filter, concat } from "rxjs";
+import { LocalParticipant as LocalParticipant3, Room, RoomEvent as RoomEvent2, Track as Track5 } from "livekit-client";
 function observeRoomEvents(room, ...events) {
   const observable = new Observable((subscribe) => {
     const onRoomUpdate = () => {
@@ -762,7 +835,7 @@ function observeRoomEvents(room, ...events) {
       });
     };
     return unsubscribe;
-  }).pipe(startWith(room));
+  }).pipe(startWith2(room));
   return observable;
 }
 function roomEventSelector(room, event) {
@@ -790,13 +863,13 @@ function roomObserver(room) {
     RoomEvent2.LocalTrackUnpublished,
     RoomEvent2.AudioPlaybackStatusChanged,
     RoomEvent2.ConnectionStateChanged
-  ).pipe(startWith(room));
+  ).pipe(startWith2(room));
   return observable;
 }
 function connectionStateObserver(room) {
   return roomEventSelector(room, RoomEvent2.ConnectionStateChanged).pipe(
-    map(([connectionState]) => connectionState),
-    startWith(room.state)
+    map2(([connectionState]) => connectionState),
+    startWith2(room.state)
   );
 }
 function screenShareObserver(room) {
@@ -812,13 +885,13 @@ function screenShareObserver(room) {
   });
   const screenShareTracks = [];
   const handleSub = (publication, participant) => {
-    if (publication.source !== Track4.Source.ScreenShare && publication.source !== Track4.Source.ScreenShareAudio) {
+    if (publication.source !== Track5.Source.ScreenShare && publication.source !== Track5.Source.ScreenShareAudio) {
       return;
     }
     let trackMap = screenShareTracks.find((tr) => tr.participant.identity === participant.identity);
     const getScreenShareTracks = (participant2) => {
-      return participant2.getTracks().filter(
-        (track) => (track.source === Track4.Source.ScreenShare || track.source === Track4.Source.ScreenShareAudio) && track.track
+      return participant2.getTrackPublications().filter(
+        (track) => (track.source === Track5.Source.ScreenShare || track.source === Track5.Source.ScreenShareAudio) && track.track
       );
     };
     if (!trackMap) {
@@ -865,8 +938,8 @@ function screenShareObserver(room) {
     })
   );
   setTimeout(() => {
-    for (const p of room.participants.values()) {
-      p.getTracks().forEach((track) => {
+    for (const p of room.remoteParticipants.values()) {
+      p.getTrackPublications().forEach((track) => {
         handleSub(track, p);
       });
     }
@@ -879,7 +952,7 @@ function roomInfoObserver(room) {
     RoomEvent2.RoomMetadataChanged,
     RoomEvent2.ConnectionStateChanged
   ).pipe(
-    map((r) => {
+    map2((r) => {
       return { name: r.name, metadata: r.metadata };
     })
   );
@@ -887,14 +960,18 @@ function roomInfoObserver(room) {
 }
 function activeSpeakerObserver(room) {
   return roomEventSelector(room, RoomEvent2.ActiveSpeakersChanged).pipe(
-    map(([speakers]) => speakers)
+    map2(([speakers]) => speakers)
   );
 }
-function createMediaDeviceObserver(kind, requestPermissions = true) {
+function createMediaDeviceObserver(kind, onError, requestPermissions = true) {
   var _a;
   const onDeviceChange = () => __async(this, null, function* () {
-    const newDevices = yield Room.getLocalDevices(kind, requestPermissions);
-    deviceSubject.next(newDevices);
+    try {
+      const newDevices = yield Room.getLocalDevices(kind, requestPermissions);
+      deviceSubject.next(newDevices);
+    } catch (e) {
+      onError == null ? void 0 : onError(e);
+    }
   });
   const deviceSubject = new Subject();
   const observable = deviceSubject.pipe(
@@ -911,15 +988,29 @@ function createMediaDeviceObserver(kind, requestPermissions = true) {
     }
     (_a = navigator == null ? void 0 : navigator.mediaDevices) == null ? void 0 : _a.addEventListener("devicechange", onDeviceChange);
   }
-  return concat(Room.getLocalDevices(kind, requestPermissions), observable);
+  return concat(
+    Room.getLocalDevices(kind, requestPermissions).catch((e) => {
+      onError == null ? void 0 : onError(e);
+      return [];
+    }),
+    observable
+  );
 }
 function createDataObserver(room) {
   return roomEventSelector(room, RoomEvent2.DataReceived);
 }
 function roomAudioPlaybackAllowedObservable(room) {
   const observable = observeRoomEvents(room, RoomEvent2.AudioPlaybackStatusChanged).pipe(
-    map((room2) => {
+    map2((room2) => {
       return { canPlayAudio: room2.canPlaybackAudio };
+    })
+  );
+  return observable;
+}
+function roomVideoPlaybackAllowedObservable(room) {
+  const observable = observeRoomEvents(room, RoomEvent2.VideoPlaybackStatusChanged).pipe(
+    map2((room2) => {
+      return { canPlayVideo: room2.canPlaybackVideo };
     })
   );
   return observable;
@@ -927,11 +1018,11 @@ function roomAudioPlaybackAllowedObservable(room) {
 function createActiveDeviceObservable(room, kind) {
   return roomEventSelector(room, RoomEvent2.ActiveDeviceChanged).pipe(
     filter(([kindOfDevice]) => kindOfDevice === kind),
-    map(([kind2, deviceId]) => {
+    map2(([kind2, deviceId]) => {
       log.debug("activeDeviceObservable | RoomEvent.ActiveDeviceChanged", { kind: kind2, deviceId });
       return deviceId;
     }),
-    startWith(room.getActiveDevice(kind))
+    startWith2(room.getActiveDevice(kind))
   );
 }
 function encryptionStatusObservable(room, participant) {
@@ -939,51 +1030,11 @@ function encryptionStatusObservable(room, participant) {
     filter(
       ([, p]) => participant.identity === (p == null ? void 0 : p.identity) || !p && participant.identity === room.localParticipant.identity
     ),
-    map(([encrypted]) => encrypted),
-    startWith(
+    map2(([encrypted]) => encrypted),
+    startWith2(
       participant instanceof LocalParticipant3 ? participant.isE2EEEnabled : participant.isEncrypted
     )
   );
-}
-
-// src/components/mediaTrack.ts
-import { Track as Track5 } from "livekit-client";
-import { map as map2, startWith as startWith2 } from "rxjs";
-
-// src/styles-interface/class-prefixer.ts
-function prefixClass(unprefixedClassName) {
-  return `${cssPrefix}-${unprefixedClassName}`;
-}
-
-// src/components/mediaTrack.ts
-function setupMediaTrack(trackIdentifier) {
-  const initialPub = getTrackByIdentifier(trackIdentifier);
-  const trackObserver = observeParticipantMedia(trackIdentifier.participant).pipe(
-    map2(() => {
-      return getTrackByIdentifier(trackIdentifier);
-    }),
-    startWith2(initialPub)
-  );
-  const className = prefixClass(
-    trackIdentifier.source === Track5.Source.Camera || trackIdentifier.source === Track5.Source.ScreenShare ? "participant-media-video" : "participant-media-audio"
-  );
-  return { className, trackObserver };
-}
-function getTrackByIdentifier(options) {
-  if (isTrackReference(options)) {
-    return options.publication;
-  } else {
-    const { source, name, participant } = options;
-    if (source && name) {
-      return participant.getTracks().find((pub) => pub.source === source && pub.trackName === name);
-    } else if (name) {
-      return participant.getTrackByName(name);
-    } else if (source) {
-      return participant.getTrack(source);
-    } else {
-      throw new Error("At least one of source and name needs to be defined");
-    }
-  }
 }
 
 // src/observables/participant.ts
@@ -1021,8 +1072,8 @@ function observeParticipantMedia(participant) {
   ).pipe(
     map3((p) => {
       const { isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = p;
-      const microphoneTrack = p.getTrack(Track6.Source.Microphone);
-      const cameraTrack = p.getTrack(Track6.Source.Camera);
+      const microphoneTrack = p.getTrackPublication(Track6.Source.Microphone);
+      const cameraTrack = p.getTrackPublication(Track6.Source.Camera);
       const participantMedia = {
         isCameraEnabled,
         isMicrophoneEnabled,
@@ -1046,8 +1097,8 @@ function createTrackObserver(participant, options) {
 function participantInfoObserver(participant) {
   const observer = observeParticipantEvents(
     participant,
-    ParticipantEvent2.ParticipantMetadataChanged
-    // ParticipantEvent.LocalTrackPublished,
+    ParticipantEvent2.ParticipantMetadataChanged,
+    ParticipantEvent2.ParticipantNameChanged
   ).pipe(
     map3(({ name, identity, metadata }) => {
       return {
@@ -1100,11 +1151,11 @@ function mutedObserver(trackRef) {
   ).pipe(
     map3((participant) => {
       var _a2, _b2;
-      const pub = (_a2 = trackRef.publication) != null ? _a2 : participant.getTrack(trackRef.source);
+      const pub = (_a2 = trackRef.publication) != null ? _a2 : participant.getTrackPublication(trackRef.source);
       return (_b2 = pub == null ? void 0 : pub.isMuted) != null ? _b2 : true;
     }),
     startWith3(
-      (_d = (_c = (_a = trackRef.publication) == null ? void 0 : _a.isMuted) != null ? _c : (_b = trackRef.participant.getTrack(trackRef.source)) == null ? void 0 : _b.isMuted) != null ? _d : true
+      (_d = (_c = (_a = trackRef.publication) == null ? void 0 : _a.isMuted) != null ? _c : (_b = trackRef.participant.getTrackPublication(trackRef.source)) == null ? void 0 : _b.isMuted) != null ? _d : true
     )
   );
 }
@@ -1119,7 +1170,7 @@ function connectedParticipantsObserver(room, options = {}) {
   const observable = new Observable2((sub) => {
     subscriber = sub;
     return () => listener.unsubscribe();
-  }).pipe(startWith3(Array.from(room.participants.values())));
+  }).pipe(startWith3(Array.from(room.remoteParticipants.values())));
   const additionalRoomEvents = (_a = options.additionalRoomEvents) != null ? _a : allParticipantRoomEvents;
   const roomEvents = Array.from(
     /* @__PURE__ */ new Set([
@@ -1130,10 +1181,10 @@ function connectedParticipantsObserver(room, options = {}) {
     ])
   );
   const listener = observeRoomEvents(room, ...roomEvents).subscribe(
-    (r) => subscriber == null ? void 0 : subscriber.next(Array.from(r.participants.values()))
+    (r) => subscriber == null ? void 0 : subscriber.next(Array.from(r.remoteParticipants.values()))
   );
-  if (room.participants.size > 0) {
-    subscriber == null ? void 0 : subscriber.next(Array.from(room.participants.values()));
+  if (room.remoteParticipants.size > 0) {
+    subscriber == null ? void 0 : subscriber.next(Array.from(room.remoteParticipants.values()));
   }
   return observable;
 }
@@ -1238,12 +1289,12 @@ function setupManualToggle() {
   let state = false;
   const enabledSubject = new Subject2();
   const pendingSubject = new Subject2();
-  const toggle = (forceState) => {
+  const toggle = (forceState) => __async(this, null, function* () {
     pendingSubject.next(true);
     state = forceState != null ? forceState : !state;
     enabledSubject.next(state);
     pendingSubject.next(false);
-  };
+  });
   const className = prefixClass("button");
   return {
     className,
@@ -1274,9 +1325,9 @@ function setupDeviceSelector(kind, room, localTrack) {
       }
       let targetTrack = void 0;
       if (kind === "audioinput")
-        targetTrack = (_b = room.localParticipant.getTrack(Track8.Source.Microphone)) == null ? void 0 : _b.track;
+        targetTrack = (_b = room.localParticipant.getTrackPublication(Track8.Source.Microphone)) == null ? void 0 : _b.track;
       else if (kind === "videoinput") {
-        targetTrack = (_c = room.localParticipant.getTrack(Track8.Source.Camera)) == null ? void 0 : _c.track;
+        targetTrack = (_c = room.localParticipant.getTrackPublication(Track8.Source.Camera)) == null ? void 0 : _c.track;
       }
       const useDefault = id === "default" && !targetTrack || id === "default" && (targetTrack == null ? void 0 : targetTrack.mediaStreamTrack.label.startsWith("Default"));
       activeDeviceSubject.next(useDefault ? id : actualDeviceId);
@@ -1351,27 +1402,31 @@ function setupParticipantTile() {
 }
 
 // src/components/chat.ts
-import { DataPacket_Kind as DataPacket_Kind2 } from "livekit-client";
+import { RoomEvent as RoomEvent4 } from "livekit-client";
 import { BehaviorSubject as BehaviorSubject2, Subject as Subject3, scan, map as map6, takeUntil } from "rxjs";
 
 // src/observables/dataChannel.ts
-import { DataPacket_Kind } from "livekit-client";
 import { Observable as Observable3, filter as filter2, map as map5 } from "rxjs";
 var DataTopic = {
-  CHAT: "lk-chat-topic"
+  CHAT: "lk-chat-topic",
+  CHAT_UPDATE: "lk-chat-update-topic"
 };
-function sendMessage(_0, _1, _2) {
-  return __async(this, arguments, function* (localParticipant, payload, topic, options = {}) {
-    const { kind, destination } = options;
-    yield localParticipant.publishData(payload, kind != null ? kind : DataPacket_Kind.RELIABLE, {
-      destination,
-      topic
+function sendMessage(_0, _1) {
+  return __async(this, arguments, function* (localParticipant, payload, options = {}) {
+    const { reliable, destinationIdentities, topic } = options;
+    yield localParticipant.publishData(payload, {
+      destinationIdentities,
+      topic,
+      reliable
     });
   });
 }
 function setupDataMessageHandler(room, topic, onMessage) {
+  const topics = Array.isArray(topic) ? topic : [topic];
   const messageObservable = createDataObserver(room).pipe(
-    filter2(([, , , messageTopic]) => topic === void 0 || messageTopic === topic),
+    filter2(
+      ([, , , messageTopic]) => topic === void 0 || messageTopic !== void 0 && topics.includes(messageTopic)
+    ),
     map5(([payload, participant, , messageTopic]) => {
       const msg = {
         payload,
@@ -1389,7 +1444,7 @@ function setupDataMessageHandler(room, topic, onMessage) {
   const send = (_0, ..._1) => __async(this, [_0, ..._1], function* (payload, options = {}) {
     isSendingSubscriber.next(true);
     try {
-      yield sendMessage(room.localParticipant, payload, topic, options);
+      yield sendMessage(room.localParticipant, payload, __spreadValues({ topic: topics[0] }, options));
     } finally {
       isSendingSubscriber.next(false);
     }
@@ -1400,14 +1455,27 @@ function setupDataMessageHandler(room, topic, onMessage) {
 // src/components/chat.ts
 var encoder = new TextEncoder();
 var decoder = new TextDecoder();
-var encode = (message) => encoder.encode(JSON.stringify({ message: message.message, timestamp: message.timestamp }));
+var topicSubjectMap = /* @__PURE__ */ new Map();
+var encode = (message) => encoder.encode(JSON.stringify(message));
 var decode = (message) => JSON.parse(decoder.decode(message));
 function setupChat(room, options) {
+  var _a, _b;
   const onDestroyObservable = new Subject3();
-  const messageSubject = new Subject3();
-  const { messageObservable } = setupDataMessageHandler(room, DataTopic.CHAT);
-  messageObservable.pipe(takeUntil(onDestroyObservable)).subscribe(messageSubject);
-  const { messageDecoder, messageEncoder } = options != null ? options : {};
+  const { messageDecoder, messageEncoder, channelTopic, updateChannelTopic } = options != null ? options : {};
+  const topic = channelTopic != null ? channelTopic : DataTopic.CHAT;
+  const updateTopic = updateChannelTopic != null ? updateChannelTopic : DataTopic.CHAT_UPDATE;
+  let needsSetup = false;
+  if (!topicSubjectMap.has(room)) {
+    needsSetup = true;
+  }
+  const topicMap = (_a = topicSubjectMap.get(room)) != null ? _a : /* @__PURE__ */ new Map();
+  const messageSubject = (_b = topicMap.get(topic)) != null ? _b : new Subject3();
+  topicMap.set(topic, messageSubject);
+  topicSubjectMap.set(room, topicMap);
+  if (needsSetup) {
+    const { messageObservable } = setupDataMessageHandler(room, [topic, updateTopic]);
+    messageObservable.pipe(takeUntil(onDestroyObservable)).subscribe(messageSubject);
+  }
   const finalMessageDecoder = messageDecoder != null ? messageDecoder : decode;
   const messagesObservable = messageSubject.pipe(
     map6((msg) => {
@@ -1415,24 +1483,64 @@ function setupChat(room, options) {
       const newMessage = __spreadProps(__spreadValues({}, parsedMessage), { from: msg.from });
       return newMessage;
     }),
-    scan((acc, value) => [...acc, value], []),
+    scan((acc, value) => {
+      if ("id" in value && acc.find((msg) => {
+        var _a2, _b2;
+        return ((_a2 = msg.from) == null ? void 0 : _a2.identity) === ((_b2 = value.from) == null ? void 0 : _b2.identity) && msg.id === value.id;
+      })) {
+        const replaceIndex = acc.findIndex((msg) => msg.id === value.id);
+        if (replaceIndex > -1) {
+          const originalMsg = acc[replaceIndex];
+          acc[replaceIndex] = __spreadProps(__spreadValues({}, value), {
+            timestamp: originalMsg.timestamp,
+            editTimestamp: value.timestamp
+          });
+        }
+        return [...acc];
+      }
+      return [...acc, value];
+    }, []),
     takeUntil(onDestroyObservable)
   );
   const isSending$ = new BehaviorSubject2(false);
   const finalMessageEncoder = messageEncoder != null ? messageEncoder : encode;
   const send = (message) => __async(this, null, function* () {
     const timestamp = Date.now();
-    const encodedMsg = finalMessageEncoder({ message, timestamp });
+    const id = crypto.randomUUID();
+    const chatMessage = { id, message, timestamp };
+    const encodedMsg = finalMessageEncoder(chatMessage);
     isSending$.next(true);
     try {
-      yield sendMessage(room.localParticipant, encodedMsg, DataTopic.CHAT, {
-        kind: DataPacket_Kind2.RELIABLE
+      yield sendMessage(room.localParticipant, encodedMsg, {
+        reliable: true,
+        topic
       });
       messageSubject.next({
         payload: encodedMsg,
-        topic: DataTopic.CHAT,
+        topic,
         from: room.localParticipant
       });
+      return chatMessage;
+    } finally {
+      isSending$.next(false);
+    }
+  });
+  const update = (message, messageId) => __async(this, null, function* () {
+    const timestamp = Date.now();
+    const chatMessage = { id: messageId, message, timestamp };
+    const encodedMsg = finalMessageEncoder(chatMessage);
+    isSending$.next(true);
+    try {
+      yield sendMessage(room.localParticipant, encodedMsg, {
+        topic: updateTopic,
+        reliable: true
+      });
+      messageSubject.next({
+        payload: encodedMsg,
+        topic,
+        from: room.localParticipant
+      });
+      return chatMessage;
     } finally {
       isSending$.next(false);
     }
@@ -1440,8 +1548,10 @@ function setupChat(room, options) {
   function destroy() {
     onDestroyObservable.next();
     onDestroyObservable.complete();
+    topicSubjectMap.clear();
   }
-  return { messageObservable: messagesObservable, isSendingObservable: isSending$, send, destroy };
+  room.once(RoomEvent4.Disconnected, destroy);
+  return { messageObservable: messagesObservable, isSendingObservable: isSending$, send, update };
 }
 
 // src/components/startAudio.ts
@@ -1452,6 +1562,16 @@ function setupStartAudio() {
   });
   const className = prefixClass("start-audio-button");
   return { className, roomAudioPlaybackAllowedObservable, handleStartAudioPlayback };
+}
+
+// src/components/startVideo.ts
+function setupStartVideo() {
+  const handleStartVideoPlayback = (room) => __async(this, null, function* () {
+    log.info("Start Video for room: ", room);
+    yield room.startVideo();
+  });
+  const className = prefixClass("start-audio-button");
+  return { className, roomVideoPlaybackAllowedObservable, handleStartVideoPlayback };
 }
 
 // src/components/chatToggle.ts
@@ -1491,7 +1611,7 @@ function setupLiveKitRoom() {
 }
 
 // src/observables/track.ts
-import { RoomEvent as RoomEvent4, TrackEvent } from "livekit-client";
+import { RoomEvent as RoomEvent5, TrackEvent } from "livekit-client";
 import { map as map7, Observable as Observable4, startWith as startWith5 } from "rxjs";
 function trackObservable(track) {
   const trackObserver = observeTrackEvents(
@@ -1522,12 +1642,12 @@ function observeTrackEvents(track, ...events) {
 }
 function getTrackReferences(room, sources, onlySubscribedTracks = true) {
   const localParticipant = room.localParticipant;
-  const allParticipants = [localParticipant, ...Array.from(room.participants.values())];
+  const allParticipants = [localParticipant, ...Array.from(room.remoteParticipants.values())];
   const trackReferences = [];
   allParticipants.forEach((participant) => {
     sources.forEach((source) => {
       const sourceReferences = Array.from(
-        participant.tracks.values()
+        participant.trackPublications.values()
       ).filter(
         (track) => track.source === source && // either return all or only the ones that are subscribed
         (!onlySubscribedTracks || track.track)
@@ -1543,20 +1663,34 @@ function getTrackReferences(room, sources, onlySubscribedTracks = true) {
   });
   return { trackReferences, participants: allParticipants };
 }
+function getParticipantTrackRefs(participant, identifier, onlySubscribedTracks = false) {
+  const { sources, kind, name } = identifier;
+  const sourceReferences = Array.from(participant.trackPublications.values()).filter(
+    (pub) => (!sources || sources.includes(pub.source)) && (!kind || pub.kind === kind) && (!name || pub.trackName === name) && // either return all or only the ones that are subscribed
+    (!onlySubscribedTracks || pub.track)
+  ).map((track) => {
+    return {
+      participant,
+      publication: track,
+      source: track.source
+    };
+  });
+  return sourceReferences;
+}
 function trackReferencesObservable(room, sources, options) {
   var _a, _b;
   const additionalRoomEvents = (_a = options.additionalRoomEvents) != null ? _a : allParticipantRoomEvents;
   const onlySubscribedTracks = (_b = options.onlySubscribed) != null ? _b : true;
   const roomEvents = Array.from(
     (/* @__PURE__ */ new Set([
-      RoomEvent4.ParticipantConnected,
-      RoomEvent4.ParticipantDisconnected,
-      RoomEvent4.ConnectionStateChanged,
-      RoomEvent4.LocalTrackPublished,
-      RoomEvent4.LocalTrackUnpublished,
-      RoomEvent4.TrackPublished,
-      RoomEvent4.TrackUnpublished,
-      RoomEvent4.TrackSubscriptionStatusChanged,
+      RoomEvent5.ParticipantConnected,
+      RoomEvent5.ParticipantDisconnected,
+      RoomEvent5.ConnectionStateChanged,
+      RoomEvent5.LocalTrackPublished,
+      RoomEvent5.LocalTrackUnpublished,
+      RoomEvent5.TrackPublished,
+      RoomEvent5.TrackUnpublished,
+      RoomEvent5.TrackSubscriptionStatusChanged,
       ...additionalRoomEvents
     ])).values()
   );
@@ -1567,6 +1701,17 @@ function trackReferencesObservable(room, sources, options) {
       return data;
     }),
     startWith5(getTrackReferences(room, sources, onlySubscribedTracks))
+  );
+  return observable;
+}
+function participantTracksObservable(participant, trackIdentifier) {
+  const observable = observeParticipantEvents(participant, ...participantTrackEvents).pipe(
+    map7((participant2) => {
+      const data = getParticipantTrackRefs(participant2, trackIdentifier);
+      log.debug(`TrackReference[] was updated. (length ${data.length})`, data);
+      return data;
+    }),
+    startWith5(getParticipantTrackRefs(participant, trackIdentifier))
   );
   return observable;
 }
@@ -1585,6 +1730,76 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
     distinctUntilChanged()
   );
   return moveAndStop$;
+}
+
+// src/persistent-storage/local-storage-helpers.ts
+function saveToLocalStorage(key, value) {
+  if (typeof localStorage === "undefined") {
+    log.error("Local storage is not available.");
+    return;
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    log.error(`Error setting item to local storage: ${error}`);
+  }
+}
+function loadFromLocalStorage(key) {
+  if (typeof localStorage === "undefined") {
+    log.error("Local storage is not available.");
+    return void 0;
+  }
+  try {
+    const item = localStorage.getItem(key);
+    if (!item) {
+      log.warn(`Item with key ${key} does not exist in local storage.`);
+      return void 0;
+    }
+    return JSON.parse(item);
+  } catch (error) {
+    log.error(`Error getting item from local storage: ${error}`);
+    return void 0;
+  }
+}
+function createLocalStorageInterface(key) {
+  return {
+    load: () => loadFromLocalStorage(key),
+    save: (value) => saveToLocalStorage(key, value)
+  };
+}
+
+// src/persistent-storage/user-choices.ts
+var USER_CHOICES_KEY = `${cssPrefix}-user-choices`;
+var defaultUserChoices = {
+  videoEnabled: true,
+  audioEnabled: true,
+  videoDeviceId: "",
+  audioDeviceId: "",
+  username: ""
+};
+var { load, save } = createLocalStorageInterface(USER_CHOICES_KEY);
+function saveUserChoices(userChoices, preventSave = false) {
+  if (preventSave === true) {
+    return;
+  }
+  save(userChoices);
+}
+function loadUserChoices(defaults, preventLoad = false) {
+  var _a, _b, _c, _d, _e;
+  const fallback = {
+    videoEnabled: (_a = defaults == null ? void 0 : defaults.videoEnabled) != null ? _a : defaultUserChoices.videoEnabled,
+    audioEnabled: (_b = defaults == null ? void 0 : defaults.audioEnabled) != null ? _b : defaultUserChoices.audioEnabled,
+    videoDeviceId: (_c = defaults == null ? void 0 : defaults.videoDeviceId) != null ? _c : defaultUserChoices.videoDeviceId,
+    audioDeviceId: (_d = defaults == null ? void 0 : defaults.audioDeviceId) != null ? _d : defaultUserChoices.audioDeviceId,
+    username: (_e = defaults == null ? void 0 : defaults.username) != null ? _e : defaultUserChoices.username
+  };
+  if (preventLoad) {
+    return fallback;
+  } else {
+    const maybeLoadedObject = load();
+    const result = __spreadValues(__spreadValues({}, fallback), maybeLoadedObject != null ? maybeLoadedObject : {});
+    return result;
+  }
 }
 export {
   DataTopic,
@@ -1612,6 +1827,7 @@ export {
   createTrackObserver,
   createUrlRegExp,
   cssPrefix,
+  defaultUserChoices,
   encryptionStatusObservable,
   getScrollBarWidth,
   getTrackByIdentifier,
@@ -1620,7 +1836,6 @@ export {
   isEqualTrackRef,
   isLocal,
   isMobileBrowser,
-  isParticipantSourcePinned,
   isParticipantTrackReferencePinned,
   isPlaceholderReplacement,
   isRemote,
@@ -1630,6 +1845,7 @@ export {
   isTrackReferencePinned,
   isTrackReferencePlaceholder,
   isWeb,
+  loadUserChoices,
   log,
   mutedObserver,
   observeParticipantEvents,
@@ -1639,14 +1855,19 @@ export {
   participantEventSelector,
   participantInfoObserver,
   participantPermissionObserver,
+  participantTrackEvents,
+  participantTracksObservable,
   roomAudioPlaybackAllowedObservable,
   roomEventSelector,
   roomInfoObserver,
   roomObserver,
+  roomVideoPlaybackAllowedObservable,
+  saveUserChoices,
   screenShareObserver,
   selectGridLayout,
   sendMessage,
   setDifference,
+  setLogExtension,
   setLogLevel,
   setupChat,
   setupChatToggle,
@@ -1664,6 +1885,7 @@ export {
   setupParticipantTile,
   setupShareLinkToggle,
   setupStartAudio,
+  setupStartVideo,
   setupTrackMutedIndicator,
   setupUserToggle,
   sortParticipants,

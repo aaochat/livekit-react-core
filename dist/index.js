@@ -92,6 +92,7 @@ __export(src_exports, {
   createTrackObserver: () => createTrackObserver,
   createUrlRegExp: () => createUrlRegExp,
   cssPrefix: () => cssPrefix,
+  defaultUserChoices: () => defaultUserChoices,
   encryptionStatusObservable: () => encryptionStatusObservable,
   getScrollBarWidth: () => getScrollBarWidth,
   getTrackByIdentifier: () => getTrackByIdentifier,
@@ -100,7 +101,6 @@ __export(src_exports, {
   isEqualTrackRef: () => isEqualTrackRef,
   isLocal: () => isLocal,
   isMobileBrowser: () => isMobileBrowser,
-  isParticipantSourcePinned: () => isParticipantSourcePinned,
   isParticipantTrackReferencePinned: () => isParticipantTrackReferencePinned,
   isPlaceholderReplacement: () => isPlaceholderReplacement,
   isRemote: () => isRemote,
@@ -110,6 +110,7 @@ __export(src_exports, {
   isTrackReferencePinned: () => isTrackReferencePinned,
   isTrackReferencePlaceholder: () => isTrackReferencePlaceholder,
   isWeb: () => isWeb,
+  loadUserChoices: () => loadUserChoices,
   log: () => log,
   mutedObserver: () => mutedObserver,
   observeParticipantEvents: () => observeParticipantEvents,
@@ -119,14 +120,19 @@ __export(src_exports, {
   participantEventSelector: () => participantEventSelector,
   participantInfoObserver: () => participantInfoObserver,
   participantPermissionObserver: () => participantPermissionObserver,
+  participantTrackEvents: () => participantTrackEvents,
+  participantTracksObservable: () => participantTracksObservable,
   roomAudioPlaybackAllowedObservable: () => roomAudioPlaybackAllowedObservable,
   roomEventSelector: () => roomEventSelector,
   roomInfoObserver: () => roomInfoObserver,
   roomObserver: () => roomObserver,
+  roomVideoPlaybackAllowedObservable: () => roomVideoPlaybackAllowedObservable,
+  saveUserChoices: () => saveUserChoices,
   screenShareObserver: () => screenShareObserver,
   selectGridLayout: () => selectGridLayout,
   sendMessage: () => sendMessage,
   setDifference: () => setDifference,
+  setLogExtension: () => setLogExtension,
   setLogLevel: () => setLogLevel,
   setupChat: () => setupChat,
   setupChatToggle: () => setupChatToggle,
@@ -144,6 +150,7 @@ __export(src_exports, {
   setupParticipantTile: () => setupParticipantTile,
   setupShareLinkToggle: () => setupShareLinkToggle,
   setupStartAudio: () => setupStartAudio,
+  setupStartVideo: () => setupStartVideo,
   setupTrackMutedIndicator: () => setupTrackMutedIndicator,
   setupUserToggle: () => setupUserToggle,
   sortParticipants: () => sortParticipants,
@@ -258,14 +265,6 @@ var attachIfSubscribed = (publication, element) => {
     }
   }
 };
-function isParticipantSourcePinned(participant, source, pinState) {
-  if (pinState === void 0) {
-    return false;
-  }
-  return pinState.some(
-    ({ source: pinnedSource, participant: pinnedParticipant }) => pinnedSource === source && pinnedParticipant.identity === participant.identity
-  );
-}
 function isParticipantTrackReferencePinned(trackRef, pinState) {
   if (pinState === void 0) {
     return false;
@@ -305,13 +304,10 @@ function isMobileBrowser() {
   return isWeb() ? /Mobi/i.test(window.navigator.userAgent) : false;
 }
 
-// src/helper/urlRegex.ts
-var import_global_tld_list = require("global-tld-list");
-var createUrlRegExp = (options) => {
-  options = __spreadValues({
-    strict: true
-  }, options);
-  const protocol = `(?:(?:[a-z]+:)?//)${options.strict ? "" : "?"}`;
+// src/helper/url-regex.ts
+function createUrlRegExp(options) {
+  options = __spreadValues({}, options);
+  const protocol = `(?:(?:[a-z]+:)?//)?`;
   const auth = "(?:\\S+(?::\\S*)?@)?";
   const ip = new RegExp(
     "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}",
@@ -319,12 +315,12 @@ var createUrlRegExp = (options) => {
   ).source;
   const host = "(?:(?:[a-z\\u00a1-\\uffff0-9][-_]*)*[a-z\\u00a1-\\uffff0-9]+)";
   const domain = "(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*";
-  const tld = `(?:\\.${options.strict ? "(?:[a-z\\u00a1-\\uffff]{2,})" : `(?:${import_global_tld_list.TLDs.sort((a, b) => b.length - a.length).join("|")})`})\\.?`;
+  const tld = `(?:\\.(?:[a-z\\u00a1-\\uffff]{2,}))\\.?`;
   const port = "(?::\\d{2,5})?";
   const path = '(?:[/?#][^\\s"]*)?';
   const regex = `(?:${protocol}|www\\.)${auth}(?:localhost|${ip}|${host}${domain}${tld})${port}${path}`;
   return options.exact ? new RegExp(`(?:^${regex}$)`, "i") : new RegExp(regex, "ig");
-};
+}
 
 // src/helper/emailRegex.ts
 var import_email_regex = __toESM(require("email-regex"));
@@ -349,7 +345,7 @@ function wasClickOutside(insideElement, event) {
 var createDefaultGrammar = () => {
   return {
     email: (0, import_email_regex.default)(),
-    url: createUrlRegExp({ strict: false })
+    url: createUrlRegExp({})
   };
 };
 function tokenize(input, grammar) {
@@ -407,6 +403,19 @@ var allParticipantRoomEvents = [
   import_livekit_client2.RoomEvent.LocalTrackPublished,
   import_livekit_client2.RoomEvent.LocalTrackUnpublished
 ];
+var participantTrackEvents = [
+  import_livekit_client2.ParticipantEvent.TrackPublished,
+  import_livekit_client2.ParticipantEvent.TrackUnpublished,
+  import_livekit_client2.ParticipantEvent.TrackMuted,
+  import_livekit_client2.ParticipantEvent.TrackUnmuted,
+  import_livekit_client2.ParticipantEvent.TrackStreamStateChanged,
+  import_livekit_client2.ParticipantEvent.TrackSubscribed,
+  import_livekit_client2.ParticipantEvent.TrackUnsubscribed,
+  import_livekit_client2.ParticipantEvent.TrackSubscriptionPermissionChanged,
+  import_livekit_client2.ParticipantEvent.TrackSubscriptionFailed,
+  import_livekit_client2.ParticipantEvent.LocalTrackPublished,
+  import_livekit_client2.ParticipantEvent.LocalTrackUnpublished
+];
 var allRemoteParticipantEvents = [
   import_livekit_client2.ParticipantEvent.ConnectionQualityChanged,
   import_livekit_client2.ParticipantEvent.IsSpeakingChanged,
@@ -436,6 +445,26 @@ function setLogLevel(level, options = {}) {
   var _a;
   log.setLevel(level);
   (0, import_livekit_client3.setLogLevel)((_a = options.liveKitClientLogLevel) != null ? _a : level);
+}
+function setLogExtension(extension, options = {}) {
+  var _a;
+  const originalFactory = log.methodFactory;
+  log.methodFactory = (methodName, configLevel, loggerName) => {
+    const rawMethod = originalFactory(methodName, configLevel, loggerName);
+    const logLevel = import_livekit_client3.LogLevel[methodName];
+    const needLog = logLevel >= configLevel && logLevel < import_livekit_client3.LogLevel.silent;
+    return (msg, context) => {
+      if (context)
+        rawMethod(msg, context);
+      else
+        rawMethod(msg);
+      if (needLog) {
+        extension(logLevel, msg, context);
+      }
+    };
+  };
+  log.setLevel(log.getLevel());
+  (0, import_livekit_client3.setLogExtension)((_a = options.liveKitClientLogExtension) != null ? _a : extension);
 }
 
 // src/helper/grid-layouts.ts
@@ -555,7 +584,11 @@ function supportsScreenSharing() {
 
 // src/types.ts
 var PIN_DEFAULT_STATE = [];
-var WIDGET_DEFAULT_STATE = { showChat: null, unreadMessages: 0 };
+var WIDGET_DEFAULT_STATE = {
+  showChat: null,
+  unreadMessages: 0,
+  showSettings: false
+};
 function isSourceWitOptions(source) {
   return typeof source === "object";
 }
@@ -698,8 +731,8 @@ function sortParticipants(participants) {
     if (a.lastSpokeAt !== b.lastSpokeAt) {
       return sortParticipantsByLastSpokenAT(a, b);
     }
-    const aVideo = a.videoTracks.size > 0;
-    const bVideo = b.videoTracks.size > 0;
+    const aVideo = a.videoTrackPublications.size > 0;
+    const bVideo = b.videoTrackPublications.size > 0;
     if (aVideo !== bVideo) {
       if (aVideo) {
         return -1;
@@ -726,9 +759,12 @@ function sortParticipants(participants) {
 
 // src/helper/array-helper.ts
 function chunk(input, size) {
-  return input.reduce((arr, item, idx) => {
-    return idx % size === 0 ? [...arr, [item]] : [...arr.slice(0, -1), [...arr.slice(-1)[0], item]];
-  }, []);
+  return input.reduce(
+    (arr, item, idx) => {
+      return idx % size === 0 ? [...arr, [item]] : [...arr.slice(0, -1), [...arr.slice(-1)[0], item]];
+    },
+    []
+  );
 }
 function zip(a1, a2) {
   const resultLength = Math.max(a1.length, a2.length);
@@ -864,11 +900,51 @@ var import_rxjs4 = require("rxjs");
 var import_livekit_client10 = require("livekit-client");
 var import_rxjs3 = require("rxjs");
 
-// src/observables/room.ts
-var import_rxjs = require("rxjs");
+// src/components/mediaTrack.ts
 var import_livekit_client8 = require("livekit-client");
+var import_rxjs = require("rxjs");
+
+// src/styles-interface/class-prefixer.ts
+function prefixClass(unprefixedClassName) {
+  return `${cssPrefix}-${unprefixedClassName}`;
+}
+
+// src/components/mediaTrack.ts
+function setupMediaTrack(trackIdentifier) {
+  const initialPub = getTrackByIdentifier(trackIdentifier);
+  const trackObserver = observeParticipantMedia(trackIdentifier.participant).pipe(
+    (0, import_rxjs.map)(() => {
+      return getTrackByIdentifier(trackIdentifier);
+    }),
+    (0, import_rxjs.startWith)(initialPub)
+  );
+  const className = prefixClass(
+    trackIdentifier.source === import_livekit_client8.Track.Source.Camera || trackIdentifier.source === import_livekit_client8.Track.Source.ScreenShare ? "participant-media-video" : "participant-media-audio"
+  );
+  return { className, trackObserver };
+}
+function getTrackByIdentifier(options) {
+  if (isTrackReference(options)) {
+    return options.publication;
+  } else {
+    const { source, name, participant } = options;
+    if (source && name) {
+      return participant.getTrackPublications().find((pub) => pub.source === source && pub.trackName === name);
+    } else if (name) {
+      return participant.getTrackPublicationByName(name);
+    } else if (source) {
+      return participant.getTrackPublication(source);
+    } else {
+      throw new Error("At least one of source and name needs to be defined");
+    }
+  }
+}
+
+// src/observables/room.ts
+var import_rxjs2 = require("rxjs");
+var import_livekit_client9 = require("livekit-client");
 function observeRoomEvents(room, ...events) {
-  const observable = new import_rxjs.Observable((subscribe) => {
+  const observable = new import_rxjs2.Observable((subscribe) => {
     const onRoomUpdate = () => {
       subscribe.next(room);
     };
@@ -881,11 +957,11 @@ function observeRoomEvents(room, ...events) {
       });
     };
     return unsubscribe;
-  }).pipe((0, import_rxjs.startWith)(room));
+  }).pipe((0, import_rxjs2.startWith)(room));
   return observable;
 }
 function roomEventSelector(room, event) {
-  const observable = new import_rxjs.Observable((subscribe) => {
+  const observable = new import_rxjs2.Observable((subscribe) => {
     const update = (...params) => {
       subscribe.next(params);
     };
@@ -900,28 +976,28 @@ function roomEventSelector(room, event) {
 function roomObserver(room) {
   const observable = observeRoomEvents(
     room,
-    import_livekit_client8.RoomEvent.ParticipantConnected,
-    import_livekit_client8.RoomEvent.ParticipantDisconnected,
-    import_livekit_client8.RoomEvent.ActiveSpeakersChanged,
-    import_livekit_client8.RoomEvent.TrackSubscribed,
-    import_livekit_client8.RoomEvent.TrackUnsubscribed,
-    import_livekit_client8.RoomEvent.LocalTrackPublished,
-    import_livekit_client8.RoomEvent.LocalTrackUnpublished,
-    import_livekit_client8.RoomEvent.AudioPlaybackStatusChanged,
-    import_livekit_client8.RoomEvent.ConnectionStateChanged
-  ).pipe((0, import_rxjs.startWith)(room));
+    import_livekit_client9.RoomEvent.ParticipantConnected,
+    import_livekit_client9.RoomEvent.ParticipantDisconnected,
+    import_livekit_client9.RoomEvent.ActiveSpeakersChanged,
+    import_livekit_client9.RoomEvent.TrackSubscribed,
+    import_livekit_client9.RoomEvent.TrackUnsubscribed,
+    import_livekit_client9.RoomEvent.LocalTrackPublished,
+    import_livekit_client9.RoomEvent.LocalTrackUnpublished,
+    import_livekit_client9.RoomEvent.AudioPlaybackStatusChanged,
+    import_livekit_client9.RoomEvent.ConnectionStateChanged
+  ).pipe((0, import_rxjs2.startWith)(room));
   return observable;
 }
 function connectionStateObserver(room) {
-  return roomEventSelector(room, import_livekit_client8.RoomEvent.ConnectionStateChanged).pipe(
-    (0, import_rxjs.map)(([connectionState]) => connectionState),
-    (0, import_rxjs.startWith)(room.state)
+  return roomEventSelector(room, import_livekit_client9.RoomEvent.ConnectionStateChanged).pipe(
+    (0, import_rxjs2.map)(([connectionState]) => connectionState),
+    (0, import_rxjs2.startWith)(room.state)
   );
 }
 function screenShareObserver(room) {
   let screenShareSubscriber;
   const observers = [];
-  const observable = new import_rxjs.Observable((subscriber) => {
+  const observable = new import_rxjs2.Observable((subscriber) => {
     screenShareSubscriber = subscriber;
     return () => {
       observers.forEach((observer) => {
@@ -931,13 +1007,13 @@ function screenShareObserver(room) {
   });
   const screenShareTracks = [];
   const handleSub = (publication, participant) => {
-    if (publication.source !== import_livekit_client8.Track.Source.ScreenShare && publication.source !== import_livekit_client8.Track.Source.ScreenShareAudio) {
+    if (publication.source !== import_livekit_client9.Track.Source.ScreenShare && publication.source !== import_livekit_client9.Track.Source.ScreenShareAudio) {
       return;
     }
     let trackMap = screenShareTracks.find((tr) => tr.participant.identity === participant.identity);
     const getScreenShareTracks = (participant2) => {
-      return participant2.getTracks().filter(
-        (track) => (track.source === import_livekit_client8.Track.Source.ScreenShare || track.source === import_livekit_client8.Track.Source.ScreenShareAudio) && track.track
+      return participant2.getTrackPublications().filter(
+        (track) => (track.source === import_livekit_client9.Track.Source.ScreenShare || track.source === import_livekit_client9.Track.Source.ScreenShareAudio) && track.track
       );
     };
     if (!trackMap) {
@@ -956,36 +1032,36 @@ function screenShareObserver(room) {
     screenShareSubscriber.next(screenShareTracks);
   };
   observers.push(
-    roomEventSelector(room, import_livekit_client8.RoomEvent.TrackSubscribed).subscribe(
+    roomEventSelector(room, import_livekit_client9.RoomEvent.TrackSubscribed).subscribe(
       ([, ...args]) => handleSub(...args)
     )
   );
   observers.push(
-    roomEventSelector(room, import_livekit_client8.RoomEvent.TrackUnsubscribed).subscribe(
+    roomEventSelector(room, import_livekit_client9.RoomEvent.TrackUnsubscribed).subscribe(
       ([, ...args]) => handleSub(...args)
     )
   );
   observers.push(
-    roomEventSelector(room, import_livekit_client8.RoomEvent.LocalTrackPublished).subscribe((args) => handleSub(...args))
+    roomEventSelector(room, import_livekit_client9.RoomEvent.LocalTrackPublished).subscribe((args) => handleSub(...args))
   );
   observers.push(
-    roomEventSelector(room, import_livekit_client8.RoomEvent.LocalTrackUnpublished).subscribe((args) => {
+    roomEventSelector(room, import_livekit_client9.RoomEvent.LocalTrackUnpublished).subscribe((args) => {
       handleSub(...args);
     })
   );
   observers.push(
-    roomEventSelector(room, import_livekit_client8.RoomEvent.TrackMuted).subscribe((args) => {
+    roomEventSelector(room, import_livekit_client9.RoomEvent.TrackMuted).subscribe((args) => {
       handleSub(...args);
     })
   );
   observers.push(
-    roomEventSelector(room, import_livekit_client8.RoomEvent.TrackUnmuted).subscribe((args) => {
+    roomEventSelector(room, import_livekit_client9.RoomEvent.TrackUnmuted).subscribe((args) => {
       handleSub(...args);
     })
   );
   setTimeout(() => {
-    for (const p of room.participants.values()) {
-      p.getTracks().forEach((track) => {
+    for (const p of room.remoteParticipants.values()) {
+      p.getTrackPublications().forEach((track) => {
         handleSub(track, p);
       });
     }
@@ -995,29 +1071,33 @@ function screenShareObserver(room) {
 function roomInfoObserver(room) {
   const observer = observeRoomEvents(
     room,
-    import_livekit_client8.RoomEvent.RoomMetadataChanged,
-    import_livekit_client8.RoomEvent.ConnectionStateChanged
+    import_livekit_client9.RoomEvent.RoomMetadataChanged,
+    import_livekit_client9.RoomEvent.ConnectionStateChanged
   ).pipe(
-    (0, import_rxjs.map)((r) => {
+    (0, import_rxjs2.map)((r) => {
       return { name: r.name, metadata: r.metadata };
     })
   );
   return observer;
 }
 function activeSpeakerObserver(room) {
-  return roomEventSelector(room, import_livekit_client8.RoomEvent.ActiveSpeakersChanged).pipe(
-    (0, import_rxjs.map)(([speakers]) => speakers)
+  return roomEventSelector(room, import_livekit_client9.RoomEvent.ActiveSpeakersChanged).pipe(
+    (0, import_rxjs2.map)(([speakers]) => speakers)
   );
 }
-function createMediaDeviceObserver(kind, requestPermissions = true) {
+function createMediaDeviceObserver(kind, onError, requestPermissions = true) {
   var _a;
   const onDeviceChange = () => __async(this, null, function* () {
-    const newDevices = yield import_livekit_client8.Room.getLocalDevices(kind, requestPermissions);
-    deviceSubject.next(newDevices);
+    try {
+      const newDevices = yield import_livekit_client9.Room.getLocalDevices(kind, requestPermissions);
+      deviceSubject.next(newDevices);
+    } catch (e) {
+      onError == null ? void 0 : onError(e);
+    }
   });
-  const deviceSubject = new import_rxjs.Subject();
+  const deviceSubject = new import_rxjs2.Subject();
   const observable = deviceSubject.pipe(
-    (0, import_rxjs.finalize)(() => {
+    (0, import_rxjs2.finalize)(() => {
       var _a2;
       (_a2 = navigator == null ? void 0 : navigator.mediaDevices) == null ? void 0 : _a2.removeEventListener("devicechange", onDeviceChange);
     })
@@ -1030,79 +1110,53 @@ function createMediaDeviceObserver(kind, requestPermissions = true) {
     }
     (_a = navigator == null ? void 0 : navigator.mediaDevices) == null ? void 0 : _a.addEventListener("devicechange", onDeviceChange);
   }
-  return (0, import_rxjs.concat)(import_livekit_client8.Room.getLocalDevices(kind, requestPermissions), observable);
+  return (0, import_rxjs2.concat)(
+    import_livekit_client9.Room.getLocalDevices(kind, requestPermissions).catch((e) => {
+      onError == null ? void 0 : onError(e);
+      return [];
+    }),
+    observable
+  );
 }
 function createDataObserver(room) {
-  return roomEventSelector(room, import_livekit_client8.RoomEvent.DataReceived);
+  return roomEventSelector(room, import_livekit_client9.RoomEvent.DataReceived);
 }
 function roomAudioPlaybackAllowedObservable(room) {
-  const observable = observeRoomEvents(room, import_livekit_client8.RoomEvent.AudioPlaybackStatusChanged).pipe(
-    (0, import_rxjs.map)((room2) => {
+  const observable = observeRoomEvents(room, import_livekit_client9.RoomEvent.AudioPlaybackStatusChanged).pipe(
+    (0, import_rxjs2.map)((room2) => {
       return { canPlayAudio: room2.canPlaybackAudio };
     })
   );
   return observable;
 }
+function roomVideoPlaybackAllowedObservable(room) {
+  const observable = observeRoomEvents(room, import_livekit_client9.RoomEvent.VideoPlaybackStatusChanged).pipe(
+    (0, import_rxjs2.map)((room2) => {
+      return { canPlayVideo: room2.canPlaybackVideo };
+    })
+  );
+  return observable;
+}
 function createActiveDeviceObservable(room, kind) {
-  return roomEventSelector(room, import_livekit_client8.RoomEvent.ActiveDeviceChanged).pipe(
-    (0, import_rxjs.filter)(([kindOfDevice]) => kindOfDevice === kind),
-    (0, import_rxjs.map)(([kind2, deviceId]) => {
+  return roomEventSelector(room, import_livekit_client9.RoomEvent.ActiveDeviceChanged).pipe(
+    (0, import_rxjs2.filter)(([kindOfDevice]) => kindOfDevice === kind),
+    (0, import_rxjs2.map)(([kind2, deviceId]) => {
       log.debug("activeDeviceObservable | RoomEvent.ActiveDeviceChanged", { kind: kind2, deviceId });
       return deviceId;
     }),
-    (0, import_rxjs.startWith)(room.getActiveDevice(kind))
+    (0, import_rxjs2.startWith)(room.getActiveDevice(kind))
   );
 }
 function encryptionStatusObservable(room, participant) {
-  return roomEventSelector(room, import_livekit_client8.RoomEvent.ParticipantEncryptionStatusChanged).pipe(
-    (0, import_rxjs.filter)(
+  return roomEventSelector(room, import_livekit_client9.RoomEvent.ParticipantEncryptionStatusChanged).pipe(
+    (0, import_rxjs2.filter)(
       ([, p]) => participant.identity === (p == null ? void 0 : p.identity) || !p && participant.identity === room.localParticipant.identity
     ),
-    (0, import_rxjs.map)(([encrypted]) => encrypted),
-    (0, import_rxjs.startWith)(
-      participant instanceof import_livekit_client8.LocalParticipant ? participant.isE2EEEnabled : participant.isEncrypted
+    (0, import_rxjs2.map)(([encrypted]) => encrypted),
+    (0, import_rxjs2.startWith)(
+      participant instanceof import_livekit_client9.LocalParticipant ? participant.isE2EEEnabled : participant.isEncrypted
     )
   );
-}
-
-// src/components/mediaTrack.ts
-var import_livekit_client9 = require("livekit-client");
-var import_rxjs2 = require("rxjs");
-
-// src/styles-interface/class-prefixer.ts
-function prefixClass(unprefixedClassName) {
-  return `${cssPrefix}-${unprefixedClassName}`;
-}
-
-// src/components/mediaTrack.ts
-function setupMediaTrack(trackIdentifier) {
-  const initialPub = getTrackByIdentifier(trackIdentifier);
-  const trackObserver = observeParticipantMedia(trackIdentifier.participant).pipe(
-    (0, import_rxjs2.map)(() => {
-      return getTrackByIdentifier(trackIdentifier);
-    }),
-    (0, import_rxjs2.startWith)(initialPub)
-  );
-  const className = prefixClass(
-    trackIdentifier.source === import_livekit_client9.Track.Source.Camera || trackIdentifier.source === import_livekit_client9.Track.Source.ScreenShare ? "participant-media-video" : "participant-media-audio"
-  );
-  return { className, trackObserver };
-}
-function getTrackByIdentifier(options) {
-  if (isTrackReference(options)) {
-    return options.publication;
-  } else {
-    const { source, name, participant } = options;
-    if (source && name) {
-      return participant.getTracks().find((pub) => pub.source === source && pub.trackName === name);
-    } else if (name) {
-      return participant.getTrackByName(name);
-    } else if (source) {
-      return participant.getTrack(source);
-    } else {
-      throw new Error("At least one of source and name needs to be defined");
-    }
-  }
 }
 
 // src/observables/participant.ts
@@ -1140,8 +1194,8 @@ function observeParticipantMedia(participant) {
   ).pipe(
     (0, import_rxjs3.map)((p) => {
       const { isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = p;
-      const microphoneTrack = p.getTrack(import_livekit_client10.Track.Source.Microphone);
-      const cameraTrack = p.getTrack(import_livekit_client10.Track.Source.Camera);
+      const microphoneTrack = p.getTrackPublication(import_livekit_client10.Track.Source.Microphone);
+      const cameraTrack = p.getTrackPublication(import_livekit_client10.Track.Source.Camera);
       const participantMedia = {
         isCameraEnabled,
         isMicrophoneEnabled,
@@ -1165,8 +1219,8 @@ function createTrackObserver(participant, options) {
 function participantInfoObserver(participant) {
   const observer = observeParticipantEvents(
     participant,
-    import_livekit_client10.ParticipantEvent.ParticipantMetadataChanged
-    // ParticipantEvent.LocalTrackPublished,
+    import_livekit_client10.ParticipantEvent.ParticipantMetadataChanged,
+    import_livekit_client10.ParticipantEvent.ParticipantNameChanged
   ).pipe(
     (0, import_rxjs3.map)(({ name, identity, metadata }) => {
       return {
@@ -1219,11 +1273,11 @@ function mutedObserver(trackRef) {
   ).pipe(
     (0, import_rxjs3.map)((participant) => {
       var _a2, _b2;
-      const pub = (_a2 = trackRef.publication) != null ? _a2 : participant.getTrack(trackRef.source);
+      const pub = (_a2 = trackRef.publication) != null ? _a2 : participant.getTrackPublication(trackRef.source);
       return (_b2 = pub == null ? void 0 : pub.isMuted) != null ? _b2 : true;
     }),
     (0, import_rxjs3.startWith)(
-      (_d = (_c = (_a = trackRef.publication) == null ? void 0 : _a.isMuted) != null ? _c : (_b = trackRef.participant.getTrack(trackRef.source)) == null ? void 0 : _b.isMuted) != null ? _d : true
+      (_d = (_c = (_a = trackRef.publication) == null ? void 0 : _a.isMuted) != null ? _c : (_b = trackRef.participant.getTrackPublication(trackRef.source)) == null ? void 0 : _b.isMuted) != null ? _d : true
     )
   );
 }
@@ -1238,7 +1292,7 @@ function connectedParticipantsObserver(room, options = {}) {
   const observable = new import_rxjs3.Observable((sub) => {
     subscriber = sub;
     return () => listener.unsubscribe();
-  }).pipe((0, import_rxjs3.startWith)(Array.from(room.participants.values())));
+  }).pipe((0, import_rxjs3.startWith)(Array.from(room.remoteParticipants.values())));
   const additionalRoomEvents = (_a = options.additionalRoomEvents) != null ? _a : allParticipantRoomEvents;
   const roomEvents = Array.from(
     /* @__PURE__ */ new Set([
@@ -1249,10 +1303,10 @@ function connectedParticipantsObserver(room, options = {}) {
     ])
   );
   const listener = observeRoomEvents(room, ...roomEvents).subscribe(
-    (r) => subscriber == null ? void 0 : subscriber.next(Array.from(r.participants.values()))
+    (r) => subscriber == null ? void 0 : subscriber.next(Array.from(r.remoteParticipants.values()))
   );
-  if (room.participants.size > 0) {
-    subscriber == null ? void 0 : subscriber.next(Array.from(room.participants.values()));
+  if (room.remoteParticipants.size > 0) {
+    subscriber == null ? void 0 : subscriber.next(Array.from(room.remoteParticipants.values()));
   }
   return observable;
 }
@@ -1357,12 +1411,12 @@ function setupManualToggle() {
   let state = false;
   const enabledSubject = new import_rxjs4.Subject();
   const pendingSubject = new import_rxjs4.Subject();
-  const toggle = (forceState) => {
+  const toggle = (forceState) => __async(this, null, function* () {
     pendingSubject.next(true);
     state = forceState != null ? forceState : !state;
     enabledSubject.next(state);
     pendingSubject.next(false);
-  };
+  });
   const className = prefixClass("button");
   return {
     className,
@@ -1391,9 +1445,9 @@ function setupDeviceSelector(kind, room, localTrack) {
       }
       let targetTrack = void 0;
       if (kind === "audioinput")
-        targetTrack = (_b = room.localParticipant.getTrack(import_livekit_client12.Track.Source.Microphone)) == null ? void 0 : _b.track;
+        targetTrack = (_b = room.localParticipant.getTrackPublication(import_livekit_client12.Track.Source.Microphone)) == null ? void 0 : _b.track;
       else if (kind === "videoinput") {
-        targetTrack = (_c = room.localParticipant.getTrack(import_livekit_client12.Track.Source.Camera)) == null ? void 0 : _c.track;
+        targetTrack = (_c = room.localParticipant.getTrackPublication(import_livekit_client12.Track.Source.Camera)) == null ? void 0 : _c.track;
       }
       const useDefault = id === "default" && !targetTrack || id === "default" && (targetTrack == null ? void 0 : targetTrack.mediaStreamTrack.label.startsWith("Default"));
       activeDeviceSubject.next(useDefault ? id : actualDeviceId);
@@ -1468,27 +1522,31 @@ function setupParticipantTile() {
 }
 
 // src/components/chat.ts
-var import_livekit_client15 = require("livekit-client");
+var import_livekit_client14 = require("livekit-client");
 var import_rxjs7 = require("rxjs");
 
 // src/observables/dataChannel.ts
-var import_livekit_client14 = require("livekit-client");
 var import_rxjs6 = require("rxjs");
 var DataTopic = {
-  CHAT: "lk-chat-topic"
+  CHAT: "lk-chat-topic",
+  CHAT_UPDATE: "lk-chat-update-topic"
 };
-function sendMessage(_0, _1, _2) {
-  return __async(this, arguments, function* (localParticipant, payload, topic, options = {}) {
-    const { kind, destination } = options;
-    yield localParticipant.publishData(payload, kind != null ? kind : import_livekit_client14.DataPacket_Kind.RELIABLE, {
-      destination,
-      topic
+function sendMessage(_0, _1) {
+  return __async(this, arguments, function* (localParticipant, payload, options = {}) {
+    const { reliable, destinationIdentities, topic } = options;
+    yield localParticipant.publishData(payload, {
+      destinationIdentities,
+      topic,
+      reliable
     });
   });
 }
 function setupDataMessageHandler(room, topic, onMessage) {
+  const topics = Array.isArray(topic) ? topic : [topic];
   const messageObservable = createDataObserver(room).pipe(
-    (0, import_rxjs6.filter)(([, , , messageTopic]) => topic === void 0 || messageTopic === topic),
+    (0, import_rxjs6.filter)(
+      ([, , , messageTopic]) => topic === void 0 || messageTopic !== void 0 && topics.includes(messageTopic)
+    ),
     (0, import_rxjs6.map)(([payload, participant, , messageTopic]) => {
       const msg = {
         payload,
@@ -1506,7 +1564,7 @@ function setupDataMessageHandler(room, topic, onMessage) {
   const send = (_0, ..._1) => __async(this, [_0, ..._1], function* (payload, options = {}) {
     isSendingSubscriber.next(true);
     try {
-      yield sendMessage(room.localParticipant, payload, topic, options);
+      yield sendMessage(room.localParticipant, payload, __spreadValues({ topic: topics[0] }, options));
     } finally {
       isSendingSubscriber.next(false);
     }
@@ -1517,14 +1575,27 @@ function setupDataMessageHandler(room, topic, onMessage) {
 // src/components/chat.ts
 var encoder = new TextEncoder();
 var decoder = new TextDecoder();
-var encode = (message) => encoder.encode(JSON.stringify({ message: message.message, timestamp: message.timestamp }));
+var topicSubjectMap = /* @__PURE__ */ new Map();
+var encode = (message) => encoder.encode(JSON.stringify(message));
 var decode = (message) => JSON.parse(decoder.decode(message));
 function setupChat(room, options) {
+  var _a, _b;
   const onDestroyObservable = new import_rxjs7.Subject();
-  const messageSubject = new import_rxjs7.Subject();
-  const { messageObservable } = setupDataMessageHandler(room, DataTopic.CHAT);
-  messageObservable.pipe((0, import_rxjs7.takeUntil)(onDestroyObservable)).subscribe(messageSubject);
-  const { messageDecoder, messageEncoder } = options != null ? options : {};
+  const { messageDecoder, messageEncoder, channelTopic, updateChannelTopic } = options != null ? options : {};
+  const topic = channelTopic != null ? channelTopic : DataTopic.CHAT;
+  const updateTopic = updateChannelTopic != null ? updateChannelTopic : DataTopic.CHAT_UPDATE;
+  let needsSetup = false;
+  if (!topicSubjectMap.has(room)) {
+    needsSetup = true;
+  }
+  const topicMap = (_a = topicSubjectMap.get(room)) != null ? _a : /* @__PURE__ */ new Map();
+  const messageSubject = (_b = topicMap.get(topic)) != null ? _b : new import_rxjs7.Subject();
+  topicMap.set(topic, messageSubject);
+  topicSubjectMap.set(room, topicMap);
+  if (needsSetup) {
+    const { messageObservable } = setupDataMessageHandler(room, [topic, updateTopic]);
+    messageObservable.pipe((0, import_rxjs7.takeUntil)(onDestroyObservable)).subscribe(messageSubject);
+  }
   const finalMessageDecoder = messageDecoder != null ? messageDecoder : decode;
   const messagesObservable = messageSubject.pipe(
     (0, import_rxjs7.map)((msg) => {
@@ -1532,24 +1603,64 @@ function setupChat(room, options) {
       const newMessage = __spreadProps(__spreadValues({}, parsedMessage), { from: msg.from });
       return newMessage;
     }),
-    (0, import_rxjs7.scan)((acc, value) => [...acc, value], []),
+    (0, import_rxjs7.scan)((acc, value) => {
+      if ("id" in value && acc.find((msg) => {
+        var _a2, _b2;
+        return ((_a2 = msg.from) == null ? void 0 : _a2.identity) === ((_b2 = value.from) == null ? void 0 : _b2.identity) && msg.id === value.id;
+      })) {
+        const replaceIndex = acc.findIndex((msg) => msg.id === value.id);
+        if (replaceIndex > -1) {
+          const originalMsg = acc[replaceIndex];
+          acc[replaceIndex] = __spreadProps(__spreadValues({}, value), {
+            timestamp: originalMsg.timestamp,
+            editTimestamp: value.timestamp
+          });
+        }
+        return [...acc];
+      }
+      return [...acc, value];
+    }, []),
     (0, import_rxjs7.takeUntil)(onDestroyObservable)
   );
   const isSending$ = new import_rxjs7.BehaviorSubject(false);
   const finalMessageEncoder = messageEncoder != null ? messageEncoder : encode;
   const send = (message) => __async(this, null, function* () {
     const timestamp = Date.now();
-    const encodedMsg = finalMessageEncoder({ message, timestamp });
+    const id = crypto.randomUUID();
+    const chatMessage = { id, message, timestamp };
+    const encodedMsg = finalMessageEncoder(chatMessage);
     isSending$.next(true);
     try {
-      yield sendMessage(room.localParticipant, encodedMsg, DataTopic.CHAT, {
-        kind: import_livekit_client15.DataPacket_Kind.RELIABLE
+      yield sendMessage(room.localParticipant, encodedMsg, {
+        reliable: true,
+        topic
       });
       messageSubject.next({
         payload: encodedMsg,
-        topic: DataTopic.CHAT,
+        topic,
         from: room.localParticipant
       });
+      return chatMessage;
+    } finally {
+      isSending$.next(false);
+    }
+  });
+  const update = (message, messageId) => __async(this, null, function* () {
+    const timestamp = Date.now();
+    const chatMessage = { id: messageId, message, timestamp };
+    const encodedMsg = finalMessageEncoder(chatMessage);
+    isSending$.next(true);
+    try {
+      yield sendMessage(room.localParticipant, encodedMsg, {
+        topic: updateTopic,
+        reliable: true
+      });
+      messageSubject.next({
+        payload: encodedMsg,
+        topic,
+        from: room.localParticipant
+      });
+      return chatMessage;
     } finally {
       isSending$.next(false);
     }
@@ -1557,8 +1668,10 @@ function setupChat(room, options) {
   function destroy() {
     onDestroyObservable.next();
     onDestroyObservable.complete();
+    topicSubjectMap.clear();
   }
-  return { messageObservable: messagesObservable, isSendingObservable: isSending$, send, destroy };
+  room.once(import_livekit_client14.RoomEvent.Disconnected, destroy);
+  return { messageObservable: messagesObservable, isSendingObservable: isSending$, send, update };
 }
 
 // src/components/startAudio.ts
@@ -1569,6 +1682,16 @@ function setupStartAudio() {
   });
   const className = prefixClass("start-audio-button");
   return { className, roomAudioPlaybackAllowedObservable, handleStartAudioPlayback };
+}
+
+// src/components/startVideo.ts
+function setupStartVideo() {
+  const handleStartVideoPlayback = (room) => __async(this, null, function* () {
+    log.info("Start Video for room: ", room);
+    yield room.startVideo();
+  });
+  const className = prefixClass("start-audio-button");
+  return { className, roomVideoPlaybackAllowedObservable, handleStartVideoPlayback };
 }
 
 // src/components/chatToggle.ts
@@ -1608,15 +1731,15 @@ function setupLiveKitRoom() {
 }
 
 // src/observables/track.ts
-var import_livekit_client16 = require("livekit-client");
+var import_livekit_client15 = require("livekit-client");
 var import_rxjs8 = require("rxjs");
 function trackObservable(track) {
   const trackObserver = observeTrackEvents(
     track,
-    import_livekit_client16.TrackEvent.Muted,
-    import_livekit_client16.TrackEvent.Unmuted,
-    import_livekit_client16.TrackEvent.Subscribed,
-    import_livekit_client16.TrackEvent.Unsubscribed
+    import_livekit_client15.TrackEvent.Muted,
+    import_livekit_client15.TrackEvent.Unmuted,
+    import_livekit_client15.TrackEvent.Subscribed,
+    import_livekit_client15.TrackEvent.Unsubscribed
   );
   return trackObserver;
 }
@@ -1639,12 +1762,12 @@ function observeTrackEvents(track, ...events) {
 }
 function getTrackReferences(room, sources, onlySubscribedTracks = true) {
   const localParticipant = room.localParticipant;
-  const allParticipants = [localParticipant, ...Array.from(room.participants.values())];
+  const allParticipants = [localParticipant, ...Array.from(room.remoteParticipants.values())];
   const trackReferences = [];
   allParticipants.forEach((participant) => {
     sources.forEach((source) => {
       const sourceReferences = Array.from(
-        participant.tracks.values()
+        participant.trackPublications.values()
       ).filter(
         (track) => track.source === source && // either return all or only the ones that are subscribed
         (!onlySubscribedTracks || track.track)
@@ -1660,20 +1783,34 @@ function getTrackReferences(room, sources, onlySubscribedTracks = true) {
   });
   return { trackReferences, participants: allParticipants };
 }
+function getParticipantTrackRefs(participant, identifier, onlySubscribedTracks = false) {
+  const { sources, kind, name } = identifier;
+  const sourceReferences = Array.from(participant.trackPublications.values()).filter(
+    (pub) => (!sources || sources.includes(pub.source)) && (!kind || pub.kind === kind) && (!name || pub.trackName === name) && // either return all or only the ones that are subscribed
+    (!onlySubscribedTracks || pub.track)
+  ).map((track) => {
+    return {
+      participant,
+      publication: track,
+      source: track.source
+    };
+  });
+  return sourceReferences;
+}
 function trackReferencesObservable(room, sources, options) {
   var _a, _b;
   const additionalRoomEvents = (_a = options.additionalRoomEvents) != null ? _a : allParticipantRoomEvents;
   const onlySubscribedTracks = (_b = options.onlySubscribed) != null ? _b : true;
   const roomEvents = Array.from(
     (/* @__PURE__ */ new Set([
-      import_livekit_client16.RoomEvent.ParticipantConnected,
-      import_livekit_client16.RoomEvent.ParticipantDisconnected,
-      import_livekit_client16.RoomEvent.ConnectionStateChanged,
-      import_livekit_client16.RoomEvent.LocalTrackPublished,
-      import_livekit_client16.RoomEvent.LocalTrackUnpublished,
-      import_livekit_client16.RoomEvent.TrackPublished,
-      import_livekit_client16.RoomEvent.TrackUnpublished,
-      import_livekit_client16.RoomEvent.TrackSubscriptionStatusChanged,
+      import_livekit_client15.RoomEvent.ParticipantConnected,
+      import_livekit_client15.RoomEvent.ParticipantDisconnected,
+      import_livekit_client15.RoomEvent.ConnectionStateChanged,
+      import_livekit_client15.RoomEvent.LocalTrackPublished,
+      import_livekit_client15.RoomEvent.LocalTrackUnpublished,
+      import_livekit_client15.RoomEvent.TrackPublished,
+      import_livekit_client15.RoomEvent.TrackUnpublished,
+      import_livekit_client15.RoomEvent.TrackSubscriptionStatusChanged,
       ...additionalRoomEvents
     ])).values()
   );
@@ -1684,6 +1821,17 @@ function trackReferencesObservable(room, sources, options) {
       return data;
     }),
     (0, import_rxjs8.startWith)(getTrackReferences(room, sources, onlySubscribedTracks))
+  );
+  return observable;
+}
+function participantTracksObservable(participant, trackIdentifier) {
+  const observable = observeParticipantEvents(participant, ...participantTrackEvents).pipe(
+    (0, import_rxjs8.map)((participant2) => {
+      const data = getParticipantTrackRefs(participant2, trackIdentifier);
+      log.debug(`TrackReference[] was updated. (length ${data.length})`, data);
+      return data;
+    }),
+    (0, import_rxjs8.startWith)(getParticipantTrackRefs(participant, trackIdentifier))
   );
   return observable;
 }
@@ -1702,6 +1850,76 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
     (0, import_rxjs9.distinctUntilChanged)()
   );
   return moveAndStop$;
+}
+
+// src/persistent-storage/local-storage-helpers.ts
+function saveToLocalStorage(key, value) {
+  if (typeof localStorage === "undefined") {
+    log.error("Local storage is not available.");
+    return;
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    log.error(`Error setting item to local storage: ${error}`);
+  }
+}
+function loadFromLocalStorage(key) {
+  if (typeof localStorage === "undefined") {
+    log.error("Local storage is not available.");
+    return void 0;
+  }
+  try {
+    const item = localStorage.getItem(key);
+    if (!item) {
+      log.warn(`Item with key ${key} does not exist in local storage.`);
+      return void 0;
+    }
+    return JSON.parse(item);
+  } catch (error) {
+    log.error(`Error getting item from local storage: ${error}`);
+    return void 0;
+  }
+}
+function createLocalStorageInterface(key) {
+  return {
+    load: () => loadFromLocalStorage(key),
+    save: (value) => saveToLocalStorage(key, value)
+  };
+}
+
+// src/persistent-storage/user-choices.ts
+var USER_CHOICES_KEY = `${cssPrefix}-user-choices`;
+var defaultUserChoices = {
+  videoEnabled: true,
+  audioEnabled: true,
+  videoDeviceId: "",
+  audioDeviceId: "",
+  username: ""
+};
+var { load, save } = createLocalStorageInterface(USER_CHOICES_KEY);
+function saveUserChoices(userChoices, preventSave = false) {
+  if (preventSave === true) {
+    return;
+  }
+  save(userChoices);
+}
+function loadUserChoices(defaults, preventLoad = false) {
+  var _a, _b, _c, _d, _e;
+  const fallback = {
+    videoEnabled: (_a = defaults == null ? void 0 : defaults.videoEnabled) != null ? _a : defaultUserChoices.videoEnabled,
+    audioEnabled: (_b = defaults == null ? void 0 : defaults.audioEnabled) != null ? _b : defaultUserChoices.audioEnabled,
+    videoDeviceId: (_c = defaults == null ? void 0 : defaults.videoDeviceId) != null ? _c : defaultUserChoices.videoDeviceId,
+    audioDeviceId: (_d = defaults == null ? void 0 : defaults.audioDeviceId) != null ? _d : defaultUserChoices.audioDeviceId,
+    username: (_e = defaults == null ? void 0 : defaults.username) != null ? _e : defaultUserChoices.username
+  };
+  if (preventLoad) {
+    return fallback;
+  } else {
+    const maybeLoadedObject = load();
+    const result = __spreadValues(__spreadValues({}, fallback), maybeLoadedObject != null ? maybeLoadedObject : {});
+    return result;
+  }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -1730,6 +1948,7 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   createTrackObserver,
   createUrlRegExp,
   cssPrefix,
+  defaultUserChoices,
   encryptionStatusObservable,
   getScrollBarWidth,
   getTrackByIdentifier,
@@ -1738,7 +1957,6 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   isEqualTrackRef,
   isLocal,
   isMobileBrowser,
-  isParticipantSourcePinned,
   isParticipantTrackReferencePinned,
   isPlaceholderReplacement,
   isRemote,
@@ -1748,6 +1966,7 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   isTrackReferencePinned,
   isTrackReferencePlaceholder,
   isWeb,
+  loadUserChoices,
   log,
   mutedObserver,
   observeParticipantEvents,
@@ -1757,14 +1976,19 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   participantEventSelector,
   participantInfoObserver,
   participantPermissionObserver,
+  participantTrackEvents,
+  participantTracksObservable,
   roomAudioPlaybackAllowedObservable,
   roomEventSelector,
   roomInfoObserver,
   roomObserver,
+  roomVideoPlaybackAllowedObservable,
+  saveUserChoices,
   screenShareObserver,
   selectGridLayout,
   sendMessage,
   setDifference,
+  setLogExtension,
   setLogLevel,
   setupChat,
   setupChatToggle,
@@ -1782,6 +2006,7 @@ function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
   setupParticipantTile,
   setupShareLinkToggle,
   setupStartAudio,
+  setupStartVideo,
   setupTrackMutedIndicator,
   setupUserToggle,
   sortParticipants,
