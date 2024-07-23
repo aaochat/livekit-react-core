@@ -16,10 +16,13 @@ export declare function roomInfoObserver(room: Room): Observable<{
     metadata: string | undefined;
 }>;
 export declare function activeSpeakerObserver(room: Room): Observable<Participant[]>;
-export declare function createMediaDeviceObserver(kind?: MediaDeviceKind, requestPermissions?: boolean): Observable<MediaDeviceInfo[]>;
+export declare function createMediaDeviceObserver(kind?: MediaDeviceKind, onError?: (e: Error) => void, requestPermissions?: boolean): Observable<MediaDeviceInfo[]>;
 export declare function createDataObserver(room: Room): Observable<[payload: Uint8Array, participant?: import("livekit-client").RemoteParticipant | undefined, kind?: import("livekit-client").DataPacket_Kind | undefined, topic?: string | undefined]>;
 export declare function roomAudioPlaybackAllowedObservable(room: Room): Observable<{
     canPlayAudio: boolean;
+}>;
+export declare function roomVideoPlaybackAllowedObservable(room: Room): Observable<{
+    canPlayVideo: boolean;
 }>;
 export declare function createActiveDeviceObservable(room: Room, kind: MediaDeviceKind): Observable<string | undefined>;
 export declare function encryptionStatusObservable(room: Room, participant: Participant): Observable<boolean>;

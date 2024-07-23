@@ -1,9 +1,10 @@
+import type { ParticipantPermission } from '@livekit/protocol';
 import type { Participant, RemoteParticipant, Room, TrackPublication } from 'livekit-client';
 import { ParticipantEvent, RoomEvent } from 'livekit-client';
-import { Observable } from 'rxjs';
 import type { ParticipantEventCallbacks } from 'livekit-client/dist/src/room/participant/Participant';
+import { Observable } from 'rxjs';
+import type { TrackReferenceOrPlaceholder } from '../track-reference';
 import type { TrackIdentifier } from '../types';
-import { TrackReferenceOrPlaceholder } from '../track-reference';
 export declare function observeParticipantEvents<T extends Participant>(participant: T, ...events: ParticipantEvent[]): Observable<T>;
 export interface ParticipantMedia<T extends Participant = Participant> {
     isCameraEnabled: boolean;
@@ -38,6 +39,6 @@ export type ConnectedParticipantObserverOptions = {
     additionalEvents?: ParticipantEvent[];
 };
 export declare function connectedParticipantObserver(room: Room, identity: string, options?: ConnectedParticipantObserverOptions): Observable<RemoteParticipant | undefined>;
-export declare function participantPermissionObserver(participant: Participant): Observable<import("livekit-client/dist/src/proto/livekit_models_pb").ParticipantPermission | undefined>;
+export declare function participantPermissionObserver(participant: Participant): Observable<ParticipantPermission | undefined>;
 export {};
 //# sourceMappingURL=participant.d.ts.map
