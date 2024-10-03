@@ -254,8 +254,7 @@ function isRemote(p) {
   return p instanceof import_livekit_client.RemoteParticipant;
 }
 var attachIfSubscribed = (publication, element) => {
-  if (!publication)
-    return;
+  if (!publication) return;
   const { isSubscribed, track } = publication;
   if (element && track) {
     if (isSubscribed) {
@@ -360,21 +359,18 @@ function tokenize(input, grammar) {
     const d = a.index - b.index;
     return d !== 0 ? d : a.weight - b.weight;
   }).filter(({ index }, i, arr) => {
-    if (i === 0)
-      return true;
+    if (i === 0) return true;
     const prev = arr[i - 1];
     return prev.index + prev.content.length <= index;
   });
   const tokens = [];
   let pos = 0;
   for (const { type, content, index } of matches) {
-    if (index > pos)
-      tokens.push(input.substring(pos, index));
+    if (index > pos) tokens.push(input.substring(pos, index));
     tokens.push({ type, content });
     pos = index + content.length;
   }
-  if (input.length > pos)
-    tokens.push(input.substring(pos));
+  if (input.length > pos) tokens.push(input.substring(pos));
   return tokens;
 }
 
@@ -454,10 +450,8 @@ function setLogExtension(extension, options = {}) {
     const logLevel = import_livekit_client3.LogLevel[methodName];
     const needLog = logLevel >= configLevel && logLevel < import_livekit_client3.LogLevel.silent;
     return (msg, context) => {
-      if (context)
-        rawMethod(msg, context);
-      else
-        rawMethod(msg);
+      if (context) rawMethod(msg, context);
+      else rawMethod(msg);
       if (needLog) {
         extension(logLevel, msg, context);
       }
@@ -1839,8 +1833,7 @@ function participantTracksObservable(participant, trackIdentifier) {
 // src/observables/dom-event.ts
 var import_rxjs9 = require("rxjs");
 function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
-  if (htmlElement === null)
-    return (0, import_rxjs9.of)(false);
+  if (htmlElement === null) return (0, import_rxjs9.of)(false);
   const move$ = (0, import_rxjs9.fromEvent)(htmlElement, "mousemove", { passive: true }).pipe((0, import_rxjs9.map)(() => true));
   const moveAndStop$ = move$.pipe(
     (0, import_rxjs9.timeout)({

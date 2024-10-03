@@ -128,8 +128,7 @@ function isRemote(p) {
   return p instanceof RemoteParticipant;
 }
 var attachIfSubscribed = (publication, element) => {
-  if (!publication)
-    return;
+  if (!publication) return;
   const { isSubscribed, track } = publication;
   if (element && track) {
     if (isSubscribed) {
@@ -234,21 +233,18 @@ function tokenize(input, grammar) {
     const d = a.index - b.index;
     return d !== 0 ? d : a.weight - b.weight;
   }).filter(({ index }, i, arr) => {
-    if (i === 0)
-      return true;
+    if (i === 0) return true;
     const prev = arr[i - 1];
     return prev.index + prev.content.length <= index;
   });
   const tokens = [];
   let pos = 0;
   for (const { type, content, index } of matches) {
-    if (index > pos)
-      tokens.push(input.substring(pos, index));
+    if (index > pos) tokens.push(input.substring(pos, index));
     tokens.push({ type, content });
     pos = index + content.length;
   }
-  if (input.length > pos)
-    tokens.push(input.substring(pos));
+  if (input.length > pos) tokens.push(input.substring(pos));
   return tokens;
 }
 
@@ -332,10 +328,8 @@ function setLogExtension(extension, options = {}) {
     const logLevel = LogLevelEnum[methodName];
     const needLog = logLevel >= configLevel && logLevel < LogLevelEnum.silent;
     return (msg, context) => {
-      if (context)
-        rawMethod(msg, context);
-      else
-        rawMethod(msg);
+      if (context) rawMethod(msg, context);
+      else rawMethod(msg);
       if (needLog) {
         extension(logLevel, msg, context);
       }
@@ -1719,8 +1713,7 @@ function participantTracksObservable(participant, trackIdentifier) {
 // src/observables/dom-event.ts
 import { concat as concat2, distinctUntilChanged, fromEvent, map as map8, of, skipUntil, timeout } from "rxjs";
 function createInteractingObservable(htmlElement, inactiveAfter = 1e3) {
-  if (htmlElement === null)
-    return of(false);
+  if (htmlElement === null) return of(false);
   const move$ = fromEvent(htmlElement, "mousemove", { passive: true }).pipe(map8(() => true));
   const moveAndStop$ = move$.pipe(
     timeout({
